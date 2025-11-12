@@ -1,0 +1,930 @@
+/* css bootstrap dịch vụ */
+
+/* --- BIẾN CSS TOÀN CỤC --- */
+:root {
+  --primary: #4f46e5;
+  --primary-light: #6366f1;
+  --primary-dark: #4338ca;
+  --secondary: #ec4899;
+  --accent: #10b981;
+  --background: #f8fafc;
+  --surface: #ffffff;
+  --text-primary: #1e293b;
+  --text-secondary: #64748b;
+  --text-tertiary: #94a3b8;
+  --border: #e2e8f0;
+  --success: #10b981;
+  --warning: #f59e0b;
+  --info: #3b82f6;
+  --danger: #ef4444;
+  --shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+body {
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  background: var(--background);
+  color: var(--text-primary);
+  margin-right: 10px;
+  display: flex;
+  flex-direction: column;
+  overflow-x: hidden;
+}
+
+.admin-container {
+  display: flex;
+  width: 100%;
+}
+
+/* --- CẤU TRÚC CHÍNH --- */
+.sidebar {
+  width: 240px;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  flex-shrink: 0;
+  height: 100vh;
+  position: sticky;
+  top: 0;
+  overflow-y: auto;
+}
+
+.main-content {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.content-area {
+  gap: 16px;
+}
+
+/* --- SIDEBAR & LOGO --- */
+.logo-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, var(--primary), var(--primary-light));
+  color: white;
+  font-size: 18px;
+  display: grid;
+  place-items: center;
+}
+
+.logo-text span {
+  color: var(--primary);
+  font-weight: 700;
+}
+
+.nav-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-tertiary);
+  font-weight: 600;
+}
+
+.nav-link {
+  color: var(--text-secondary);
+  font-weight: 500;
+  font-size: 14px;
+  transition: all 0.2s ease;
+  border-right: 3px solid transparent;
+}
+
+.nav-link:hover {
+  background: var(--background);
+  color: var(--primary);
+}
+
+.nav-link.active {
+  background: linear-gradient(135deg, rgba(79, 70, 229, 0.08), transparent);
+  color: var(--primary);
+  border-right: 3px solid var(--primary);
+  font-weight: 600;
+}
+
+/* --- HEADER (DESKTOP & MOBILE) --- */
+.admin-header {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.page-title {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.page-subtitle {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.mobile-header-bar {
+  background-color: var(--surface);
+  padding: 12px 15px;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.mobile-header-bar .page-title {
+  font-size: 15px;
+}
+
+.mobile-header-bar .page-subtitle {
+  font-size: 12px;
+}
+
+.mobile-logo-toggle {
+  cursor: pointer;
+  color: var(--primary);
+  font-size: 18px;
+  padding: 5px;
+}
+
+.user-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50% !important;
+  background: linear-gradient(135deg, var(--primary), var(--primary-light));
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  font-size: 14px;
+  color: white;
+  flex-shrink: 0;
+}
+
+.search-box {
+  position: relative;
+  width: 280px;
+}
+
+.search-box .form-control {
+  background: var(--background);
+  border-radius: 8px;
+  padding-left: 38px;
+  height: 38px;
+  font-size: 14px;
+}
+
+.search-icon {
+  position: absolute;
+  left: 15px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-tertiary);
+  font-size: 14px;
+  z-index: 5;
+}
+
+/* === STAT CARD ĐÃ ĐƯỢC CÂN CHỈNH === */
+
+.stat-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  padding: 20px; /* 1.25rem */
+  border-radius: 12px !important;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  transition: all 0.2s ease-in-out;
+  cursor: pointer;
+}
+
+.stat-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.07);
+}
+
+.stat-icon {
+  /* Tăng kích thước icon */
+  width: 48px;
+  height: 48px;
+  
+  border-radius: 12px;
+  color: white;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+}
+
+.stat-icon i {
+  font-size: 22px;
+  line-height: 1;
+}
+
+/* (Các màu nền của icon giữ nguyên) */
+.stat-icon.services {
+  background: linear-gradient(135deg, var(--primary), var(--primary-light));
+}
+.stat-icon.brands {
+  background: linear-gradient(135deg, var(--accent), #34D399);
+}
+.stat-icon.types {
+  background: linear-gradient(135deg, var(--info), #60A5FA);
+}
+.stat-icon.warranty {
+  background: linear-gradient(135deg, var(--warning), #FBBF24);
+}
+
+.stat-info {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  flex-grow: 1;
+  gap: 4px; 
+}
+
+/* === THUỘC TÍNH CHO SỐ (STAT NUMBER) === */
+.stat-info h3 {
+  font-size: 2rem;     
+  font-weight: 700;  
+  color: var(--text-primary); 
+  line-height: 1.1;     /* Chiều cao dòng sát hơn */
+  margin-bottom: 0 !important; /* Ghi đè Bootstrap */
+}
+
+/* === THUỘC TÍNH CHO CHỮ MÔ TẢ === */
+.stat-info p {
+  font-size: 14px; /* 0.875rem - Tăng cỡ chữ cho dễ đọc */
+  color: var(--text-secondary);
+  margin-bottom: 0;
+  line-height: 1.4; 
+}
+
+.stat-card.stat-primary .stat-info h3 { color: var(--primary); }
+.stat-card.stat-success .stat-info h3 { color: var(--success); }
+.stat-card.stat-info .stat-info h3 { color: var(--info); }
+.stat-card.stat-warning .stat-info h3 { color: var(--warning); }
+
+/* --- SERVICE TYPES CARD (Sidebar Phụ) --- */
+.service-types-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  height: fit-content;
+  border-radius: 8px !important;
+}
+
+.service-type-item {
+  padding: 10px 12px;
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 14px;
+  border-radius: 6px;
+}
+
+.add-service-type {
+  background: var(--success);
+  color: white;
+  font-weight: 600;
+  text-align: center;
+  border: none;
+  transition: background-color 0.2s ease;
+}
+
+.service-type-item:hover {
+  background: var(--background);
+  color: var(--primary);
+}
+
+.service-type-item.active {
+  background: rgba(79, 70, 229, 0.08);
+  color: var(--primary);
+  border-left: 3px solid var(--primary);
+  font-weight: 600;
+}
+
+.service-type-item.active:hover {
+  background: rgba(79, 70, 229, 0.12);
+}
+
+.add-service-type:hover {
+  background: var(--accent);
+  /* Sử dụng màu --accent khi hover */
+}
+
+/* --- TOGGLE DANH MỤC (MOBILE) --- */
+.service-menu-toggle-btn {
+  background: var(--surface);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 15px;
+  font-size: 15px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.service-menu-toggle-btn:hover {
+  background: var(--background);
+  color: var(--primary);
+}
+
+.service-menu-toggle-btn .fa-list {
+  color: var(--primary);
+  font-size: 18px;
+}
+
+.service-menu-toggle-btn .chevron-icon {
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+/* --- BỘ LỌC (FILTERS) (ĐÃ HOÀN THIỆN) --- */
+.filters-container {
+  background: var(--surface);
+  border: 1px solid var(--border) !important;
+  box-shadow: var(--shadow);
+}
+
+.filter-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 4px !important;
+}
+
+.form-select {
+  font-size: 14px;
+  height: 40px !important;
+  background-color: var(--background);
+  border-color: var(--border);
+  border-radius: 8px;
+}
+
+.form-select:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+}
+
+.filter-actions {
+  margin-top: 12px;
+}
+
+.filter-actions .btn-secondary {
+  background-color: #4b5563;
+  /* Xám tối */
+  color: white;
+  border: none;
+  font-weight: 600;
+  font-size: 14px;
+  padding: 8px 12px;
+  border-radius: 6px;
+}
+
+.filter-actions .btn-secondary:hover {
+  background-color: #374151;
+  color: white;
+}
+
+.filter-actions .btn-primary-custom {
+  background-color: transparent !important;
+  /* Nền trong suốt */
+  color: var(--text-primary) !important;
+  border: none;
+  font-weight: 600;
+  font-size: 14px;
+  padding: 8px 12px;
+}
+
+.filter-actions .btn-primary-custom:hover {
+  color: var(--primary) !important;
+  background-color: var(--background) !important;
+}
+
+.filter-actions .btn-primary-custom i {
+  color: var(--success);
+  font-size: 16px;
+}
+
+/* --- BẢNG (TABLE) VÀ CÁC NÚT HÀNH ĐỘNG --- */
+.services-table-card {
+  overflow: hidden;
+  /* Giúp bo góc cho table */
+}
+
+.services-table thead {
+  background: var(--background);
+}
+
+.services-table th {
+  font-size: 11px;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  font-weight: 600;
+  white-space: nowrap;
+  padding: 12px 10px;
+}
+
+.services-table td {
+  font-size: 13px;
+  vertical-align: middle;
+  padding: 12px 10px;
+}
+
+.services-table tbody tr:hover {
+  background: var(--background);
+}
+
+.badge-custom {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  display: inline-block;
+}
+
+.service-type-badge {
+  background: rgba(79, 70, 229, 0.1);
+  color: var(--primary);
+}
+
+.brand-badge {
+  background: rgba(16, 185, 129, 0.1);
+  color: var(--success);
+}
+
+.warranty-badge {
+  background: rgba(245, 158, 11, 0.1);
+  color: var(--warning);
+}
+
+.action-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.action-btn {
+  width: 27px;
+  height: 27px;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: none;
+  font-size: 14px;
+}
+
+.action-btn.action-view {
+  background: rgba(59, 130, 246, 0.1);
+  color: var(--info);
+}
+
+.action-btn.action-view:hover {
+  background: var(--info);
+  color: white;
+}
+
+.action-btn.action-edit {
+  background: rgba(16, 185, 129, 0.1);
+  color: var(--success);
+}
+
+.action-btn.action-edit:hover {
+  background: var(--success);
+  color: white;
+}
+
+.action-btn.action-delete {
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--danger);
+}
+
+.action-btn.action-delete:hover {
+  background: var(--danger);
+  color: white;
+}
+
+/* Nút trong Card Header (Excel, PDF...) */
+.btn-success-custom {
+  background: var(--success);
+  color: white;
+  border-color: var(--success);
+}
+
+.btn-success-custom:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.btn-primary-custom {
+  background: var(--primary);
+  color: white;
+  border-color: var(--primary);
+}
+
+.btn-primary-custom:hover {
+  background: var(--primary-dark);
+  border-color: var(--primary-dark);
+}
+
+/* --- TÙY CHỈNH PHÂN TRANG (PAGINATION) --- */
+/* Text "Hiển thị..." */
+.pagination-info {
+  font-size: 13px;
+  /* Tăng cỡ chữ 1 chút */
+  color: var(--text-secondary);
+  align-self: center;
+  /* Đảm bảo căn giữa dọc */
+}
+
+/* Class bọc ngoài <ul> */
+.pagination-controls {
+  margin: 0;
+}
+
+/* Nút bấm (Tất cả các nút) */
+.pagination-controls .page-link {
+  width: 34px;
+  /* Tăng kích thước */
+  height: 34px;
+  /* Tăng kích thước */
+  border-radius: 6px;
+  /* Bo góc nhất quán */
+  padding: 0;
+  font-size: 14px;
+  /* Tăng cỡ chữ số */
+  font-weight: 600;
+  /* In đậm số */
+  display: flex;
+  /* Dùng flex để căn giữa icon/số */
+  align-items: center;
+  justify-content: center;
+  margin: 0 2px;
+  /* Tăng khoảng cách giữa các nút */
+  background-color: var(--surface);
+  /* Nền trắng */
+  color: var(--text-secondary);
+  /* Chữ xám */
+  border: 1px solid var(--border);
+  transition: all 0.2s ease;
+}
+
+/* Khi rê chuột vào nút */
+.pagination-controls .page-link:hover {
+  background-color: var(--background);
+  /* Nền xám nhạt (giống hover của bảng) */
+  color: var(--primary);
+  border-color: var(--border);
+  z-index: 2;
+}
+
+/* Nút đang được chọn (Active) */
+.pagination-controls .page-item.active .page-link,
+.pagination-controls .page-item.active .page-link:hover {
+  background-color: var(--primary);
+  border-color: var(--primary);
+  color: white;
+  z-index: 3;
+}
+
+/* Nút bị vô hiệu (Disabled) */
+.pagination-controls .page-item.disabled .page-link {
+  background-color: var(--background);
+  color: var(--text-tertiary);
+  border-color: var(--border);
+}
+
+/* Đảm bảo nút focus đẹp */
+.pagination-controls .page-link:focus {
+  box-shadow: 0 0 0 0.25rem rgba(79, 70, 229, 0.25);
+  z-index: 4;
+}
+
+/* --- RESPONSIVE MEDIA QUERIES --- */
+/* Tablet Thu Gọn Sidebar */
+@media (max-width: 1200px) and (min-width: 992px) {
+  .sidebar {
+    width: 70px;
+  }
+  .sidebar .nav-text,
+  .sidebar .nav-title,
+  .sidebar .logo-text {
+    display: none;
+  }
+  .sidebar .nav-link {
+    justify-content: center;
+    padding: 12px 10px;
+  }
+  .sidebar .logo {
+    padding: 20px 10px;
+    justify-content: center !important;
+  }
+}
+
+/* Mobile/Tablet Nhỏ (< 992px) */
+@media (max-width: 991.98px) {
+  .sidebar {
+    display: none !important;
+  }
+  .desktop-header {
+    display: none !important;
+  }
+  .content-area {
+    padding: 15px;
+  }
+  .service-types-col {
+    display: none !important;
+  }
+  /* Stats 1 cột trên Mobile */
+  .stats-row .col-12 {
+    flex-basis: 100%;
+    max-width: 100%;
+  }
+  .main-content-right .d-flex.align-items-center {
+    flex-direction: column;
+    align-items: flex-start !important;
+  }
+  .search-box {
+    width: 100% !important;
+  }
+  .mobile-header-bar {
+    position: sticky;
+    top: 0;
+  }
+}
+
+/* Mobile Table (< 768px) */
+@media (max-width: 767.98px) {
+  .services-table .table {
+    border: 1px solid var(--border);
+  }
+  .services-table thead {
+    display: none;
+  }
+  .services-table .table tr {
+    margin-bottom: 12px;
+    border-bottom: 3px solid var(--border);
+    display: block;
+    /* Giữ nguyên */
+    background: var(--surface);
+  }
+  .services-table .table td {
+    display: block;
+    text-align: right;
+    padding: 8px 10px;
+    position: relative;
+    padding-left: 50%;
+    border-bottom: none;
+  }
+  .services-table .table td::before {
+    content: attr(data-label);
+    position: absolute;
+    left: 10px;
+    width: 45%;
+    padding-right: 10px;
+    white-space: nowrap;
+    text-align: left;
+    font-weight: 600;
+    color: var(--text-secondary);
+    font-size: 13px;
+  }
+  /* Căn chỉnh nút hành động trên mobile */
+  td[data-label="Hành động"] {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+  }
+}
+
+/* Offcanvas Menu */
+.offcanvas {
+  width: 260px !important;
+}
+
+/* ======================================== */
+/* === CSS CHO TRANG CHATBOT PERMISSIONS === */
+/* ======================================== */
+/* --- Stat Cards (Thẻ thống kê) --- */
+.stat-card {
+  background-color: #ffffff;
+  border: 0;
+  border-radius: 0.75rem;
+  box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.05);
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.stat-card .card-body {
+  padding: 1.5rem;
+}
+
+.stat-card .stat-number {
+  font-size: 20px;
+  font-weight: 700;
+  color: #2a3547;
+  margin-bottom: 0.25rem;
+
+}
+
+.stat-card .stat-text {
+  font-size: 0.9rem;
+  color: #88909d;
+  margin-bottom: 0;
+}
+
+/* Thêm màu cho các thẻ */
+:root {
+  --bs-primary: #6658dd;
+  --bs-success: #198754;
+  --bs-info: #0dcaf0;
+  --bs-warning: #ffc107;
+}
+
+.stat-card.stat-primary .stat-number {
+  color: var(--bs-primary);
+}
+
+.stat-card.stat-success .stat-number {
+  color: var(--bs-success);
+}
+
+.stat-card.stat-info .stat-number {
+  color: var(--bs-info);
+}
+
+.stat-card.stat-warning .stat-number {
+  color: var(--bs-warning);
+}
+
+/* --- Page Tabs (Thanh Tab) --- */
+.page-tabs {
+  border-bottom: 1px solid #dee2e6;
+  margin-bottom: 0 !important;
+  /* Ghi đè gap-3/gap-4 */
+}
+
+.page-tabs .nav-link {
+  padding: 0.75rem 1rem;
+  color: #555e6c;
+  font-weight: 600;
+  font-size: 0.95rem;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: none;
+}
+
+.page-tabs .nav-link i {
+  color: #88909d;
+}
+
+.page-tabs .nav-link .badge {
+  background-color: #eef2f7;
+  color: #555e6c;
+  font-weight: 600;
+}
+
+.page-tabs .nav-link.active,
+.page-tabs .nav-link:hover {
+  color: var(--bs-primary);
+  background-color: transparent;
+  border-bottom-color: var(--bs-primary);
+}
+
+.page-tabs .nav-link.active i,
+.page-tabs .nav-link:hover i {
+  color: var(--bs-primary);
+}
+
+.page-tabs .nav-link.active .badge {
+  background-color: var(--bs-primary);
+  color: #ffffff;
+}
+
+/* --- Table Card (Thẻ chứa bảng) --- */
+.table-card {
+  border: 0;
+  border-radius: 0.75rem;
+  box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.05);
+  background-color: #ffffff;
+  /* Thêm margin-top để tách biệt với thanh tab */
+  margin-top: 1.5rem;
+}
+
+.table-card .card-header {
+  background-color: #ffffff;
+  border-bottom: 1px solid #f0f0f0;
+  padding: 1.5rem;
+  border-top-left-radius: 0.75rem;
+  border-top-right-radius: 0.75rem;
+}
+
+.table-card .card-header h3 {
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin-bottom: 0;
+}
+
+.table-card .card-body {
+  padding: 1rem 1.5rem 1.5rem;
+}
+
+/* Nút Sửa/Xóa trong bảng */
+.table .btn-action {
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  border: none;
+}
+
+.btn-action.btn-edit {
+  color: var(--bs-success);
+  background-color: rgba(25, 135, 84, 0.1);
+}
+
+.btn-action.btn-edit:hover {
+  background-color: rgba(25, 135, 84, 0.2);
+}
+
+.btn-action.btn-delete {
+  color: var(--bs-danger);
+  background-color: rgba(220, 53, 69, 0.1);
+}
+
+.btn-action.btn-delete:hover {
+  background-color: rgba(220, 53, 69, 0.2);
+}
+
+/* --- CSS cho danh sách Chat --- */
+.chat-list-item {
+  /* Bỏ đường viền mặc định của list-group-item-action */
+  border: none !important;
+  border-bottom: 1px solid #f0f0f0 !important;
+  /* Thêm đường viền tùy chỉnh */
+}
+
+.chat-list-item:last-child {
+  border-bottom: none !important;
+}
+
+.chat-list-item:hover {
+  background-color: #f9faff;
+}
+
+.chat-meta {
+  font-size: 0.8rem;
+  color: #88909d;
+}
+
+.chat-meta .badge {
+  font-size: 0.75rem;
+}
+
+/* --- CSS cho Trạng thái trống (Empty State) --- */
+.empty-state-container {
+  background-color: #f9faff;
+  border-radius: 0.5rem;
+  padding: 2rem;
+}
+
+/* === CSS CHO TRANG GÓI ĐĂNG BÀI === */
+.feature-list {
+  padding-left: 0;
+}
+
+.feature-list li {
+  color: #333;
+  margin-bottom: 4px;
+}
+
+.feature-list li:last-child {
+  margin-bottom: 0;
+}
+
+/* Tô màu cho dòng "+ 3 tính năng khác" */
+.feature-list li:last-child {
+  color: var(--bs-primary, #6658dd);
+  font-weight: 500;
+}
+
+/* ======================================== */
+/* === CSS CHO TRANG THIẾT BỊ === */
+/* ======================================== */
+.color-swatch {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1px solid #dee2e6;
+}
+
+.table-card .form-label.small {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: #555;
+}
