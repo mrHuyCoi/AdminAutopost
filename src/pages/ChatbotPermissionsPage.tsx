@@ -1,39 +1,51 @@
-import React, { useState, useEffect } from 'react';
+// src/pages/ChatbotPermissionPage.tsx
+import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import StatCard from '../components/StatCard';
-import { UserChatbotSubscription } from '../types/chatbot';
-import { chatbotSubscriptionService } from '../services/chatbotSubscriptionService';
+import toast from 'react-hot-toast';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faCheck, faTimes, faTrash, faSpinner, faCrown, faClock } from '@fortawesome/free-solid-svg-icons';
+import {
+  faCheck, faTimes, faTrash, faSpinner,
+  faCrown, faClock, faUsers, faCheckCircle,
+  faTimesCircle, faFilter, faSync, faCopy, faExclamationTriangle
+} from '@fortawesome/free-solid-svg-icons';
 
-const modalRoot = document.getElementById('modal-root');
+import { 
+  chatbotSubscriptionService, 
+  UserChatbotSubscription 
+} from '../services/chatbotSubscriptionService';
+
+// Safe get modal root (SSR compatible)
+const modalRoot = typeof document !== 'undefined' ? document.getElementById('modal-root') : null;
+
+// Helper: Chuyển lỗi validate thành chuỗi
+const getErrorMessage = (err: any): string => {
+  const data = err?.response?.data;
+
+  if (Array.isArray(data?.detail)) {
+    return data.detail.map((e: any) => e.msg || 'Lỗi không xác định').join(', ');
+  }
+
+  if (typeof data?.detail === 'string') return data.detail;
+  if (data?.message) return data.message;
+
+  return 'Đã xảy ra lỗi. Vui lòng thử lại.';
+};
 
 const ChatbotPermissionPage: React.FC = () => {
   const [subscriptions, setSubscriptions] = useState<UserChatbotSubscription[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'pending' | 'approved' | 'all'>('pending');
+  const [activeTab, setActiveTab] = useState<'pending' | 'approved' | 'rejected' | 'all'>('pending');
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
+  // Modal states
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
-  
   const [showActionModal, setShowActionModal] = useState(false);
   const [actionType, setActionType] = useState<'approve' | 'reject' | null>(null);
   const [actionId, setActionId] = useState<string | null>(null);
   const [actionNotes, setActionNotes] = useState<string>('');
-  const [isSaving, setIsSaving] = useState(false);
-  const [actionError, setActionError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const titleElement = document.getElementById('pageTitle');
-    const subtitleElement = document.getElementById('pageSubtitle');
-    if (titleElement) titleElement.innerText = 'Phân quyền Chatbot';
-    if (subtitleElement) subtitleElement.innerText = 'Phê duyệt, từ chối hoặc thu hồi quyền truy cập chatbot';
-    
-    loadSubscriptions();
-  }, []);
+  const [selectedUser, setSelectedUser] = useState<UserChatbotSubscription['user'] | null>(null);
 
   const loadSubscriptions = async () => {
     try {
@@ -42,273 +54,502 @@ const ChatbotPermissionPage: React.FC = () => {
       const data = await chatbotSubscriptionService.getAllSubscriptions();
       setSubscriptions(data);
     } catch (err: any) {
-      console.error('Error loading subscriptions:', err);
-      setError(err.response?.data?.detail || err.message || 'Lỗi tải danh sách đăng ký');
+      const errorMessage = getErrorMessage(err);
+      setError(errorMessage);
+      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }
   };
-  
-  const handleActionClick = (id: string, type: 'approve' | 'reject') => {
+
+  useEffect(() => {
+    loadSubscriptions();
+  }, []);
+
+  const handleActionClick = (
+    id: string,
+    type: 'approve' | 'reject',
+    user: UserChatbotSubscription['user']
+  ) => {
+    if (!user || !user.email) {
+      toast.error('Thông tin người dùng không hợp lệ');
+      return;
+    }
+
     setActionId(id);
     setActionType(type);
+    setSelectedUser(user);
     setActionNotes('');
-    setActionError(null);
     setShowActionModal(true);
   };
-  
+
   const handleDeleteClick = (id: string) => {
     setDeleteId(id);
-    setDeleteError(null);
     setShowDeleteModal(true);
   };
 
   const handleCloseModals = () => {
-    if (isSaving || isDeleting) return;
+    if (actionLoading) return;
     setShowActionModal(false);
     setShowDeleteModal(false);
+    setActionId(null);
+    setActionType(null);
+    setDeleteId(null);
+    setActionNotes('');
+    setSelectedUser(null);
   };
 
   const handleConfirmAction = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!actionId || !actionType) return;
-    
-    setIsSaving(true);
-    setActionError(null);
-    
+    if (!actionId || !actionType || !selectedUser) return;
+
+    const notes = actionNotes.trim();
+    if (actionType === 'reject' && !notes) {
+      toast.error('Vui lòng nhập lý do từ chối');
+      return;
+    }
+
+    const loadingKey = `action-${actionId}`;
+    setActionLoading(loadingKey);
+
     try {
-      let updatedSub: UserChatbotSubscription;
       if (actionType === 'approve') {
-        updatedSub = await chatbotSubscriptionService.approveSubscription(actionId, actionNotes || null);
+        await chatbotSubscriptionService.approveSubscription(actionId, notes || null);
+        toast.success('Đã phê duyệt thành công');
       } else {
-        updatedSub = await chatbotSubscriptionService.rejectSubscription(actionId, actionNotes || null);
+        await chatbotSubscriptionService.rejectSubscription(actionId, notes);
+        toast.success('Đã từ chối đăng ký');
       }
-      
-      setSubscriptions(prev => prev.map(s => (s.id === actionId ? updatedSub : s)));
+      await loadSubscriptions();
       handleCloseModals();
-      
     } catch (err: any) {
-      console.error('Error processing action:', err);
-      setActionError(err.response?.data?.detail || err.message || 'Lỗi không xác định');
+      const errorMessage = getErrorMessage(err);
+      toast.error(errorMessage);
     } finally {
-      setIsSaving(false);
+      setActionLoading(null);
     }
   };
 
   const handleConfirmDelete = async () => {
     if (!deleteId) return;
-    setIsDeleting(true);
-    setDeleteError(null);
-    
+    const loadingKey = `delete-${deleteId}`;
+    setActionLoading(loadingKey);
+
     try {
-      await chatbotSubscriptionService.deleteSubscription(deleteId); 
+      await chatbotSubscriptionService.deleteSubscription(deleteId);
+      toast.success('Đã xóa đăng ký');
       setSubscriptions(prev => prev.filter(s => s.id !== deleteId));
       handleCloseModals();
     } catch (err: any) {
-      console.error('Error deleting subscription:', err);
-      setDeleteError(err.response?.data?.detail || err.message || 'Lỗi khi xóa');
+      const errorMessage = getErrorMessage(err);
+      toast.error(errorMessage);
     } finally {
-      setIsDeleting(false);
+      setActionLoading(null);
     }
   };
-  
-  const filteredSubscriptions = React.useMemo(() => {
-    if (activeTab === 'all') {
-      return subscriptions;
-    }
+
+  const filteredSubscriptions = useMemo(() => {
+    if (activeTab === 'all') return subscriptions;
     return subscriptions.filter(s => s.status === activeTab);
   }, [subscriptions, activeTab]);
 
+  const stats = useMemo(() => {
+    const total = subscriptions.length;
+    const pending = subscriptions.filter(s => s.status === 'pending').length;
+    const approved = subscriptions.filter(s => s.status === 'approved').length;
+    const rejected = subscriptions.filter(s => s.status === 'rejected').length;
+    const active = subscriptions.filter(s => s.is_active).length;
+    return { total, pending, approved, rejected, active };
+  }, [subscriptions]);
+
   const renderSubscriptionTable = () => {
-    if (loading) return <tr><td colSpan={6} className="text-center py-5"><div className="spinner-border text-primary" role="status"></div></td></tr>;
-    if (error) return <tr><td colSpan={6} className="text-center text-danger py-4">{error}</td></tr>;
-    if (filteredSubscriptions.length === 0) return <tr><td colSpan={6} className="text-center py-5 text-muted">Không có dữ liệu cho mục này.</td></tr>;
+    if (loading) {
+      return Array.from({ length: 5 }).map((_, i) => (
+        <tr key={i}>
+          <td colSpan={7}>
+            <div className="d-flex align-items-center p-3">
+              <div className="placeholder-glow w-100">
+                <div className="placeholder col-12 h-5 rounded"></div>
+              </div>
+            </div>
+          </td>
+        </tr>
+      ));
+    }
+
+    if (error) {
+      return (
+        <tr>
+          <td colSpan={7} className="text-center py-5">
+            <div className="alert alert-danger d-inline-block">
+              <FontAwesomeIcon icon={faExclamationTriangle} className="me-2" />
+              {error}
+              <button 
+                className="btn btn-sm btn-outline-danger ms-3"
+                onClick={loadSubscriptions}
+              >
+                <FontAwesomeIcon icon={faSync} /> Thử lại
+              </button>
+            </div>
+          </td>
+        </tr>
+      );
+    }
+
+    if (filteredSubscriptions.length === 0) {
+      return (
+        <tr>
+          <td colSpan={7} className="text-center py-5 text-muted">
+            <FontAwesomeIcon icon={faFilter} size="3x" className="mb-3 opacity-25" />
+            <p className="mb-1 fw-medium">Không có dữ liệu</p>
+            <small>Chưa có đăng ký nào ở trạng thái này</small>
+          </td>
+        </tr>
+      );
+    }
 
     return filteredSubscriptions.map((sub) => (
-      <tr key={sub.id}>
-        <td data-label="Người dùng" className="align-middle" style={{ paddingLeft: '1.5rem' }}>
-          <strong>{sub.user?.full_name || 'N/A'}</strong>
-          <br />
-          <small className="text-muted">{sub.user?.email}</small>
+      <tr key={sub.id} className={`transition-all ${!sub.is_active ? 'opacity-75' : ''}`}>
+        <td className="ps-4 py-3">
+          <div className="d-flex align-items-center">
+            <div className="bg-gradient d-flex align-items-center justify-content-center rounded-circle text-white fw-bold me-3"
+              style={{
+                width: '40px',
+                height: '40px',
+                background: 'linear-gradient(135deg, #667eea, #764ba2)',
+                fontSize: '0.9rem',
+              }}
+            >
+              {sub.user?.full_name?.charAt(0).toUpperCase() || 'U'}
+            </div>
+            <div>
+              <div className="fw-semibold">{sub.user?.full_name || 'Chưa có tên'}</div>
+              <div className="small text-muted">{sub.user?.email || 'N/A'}</div>
+            </div>
+          </div>
         </td>
-        <td data-label="Gói" className="align-middle">
-          <FontAwesomeIcon icon={faCrown} className="text-warning me-2" />
-          {sub.plan.name}
+        <td>
+          <span className="badge bg-primary px-2 py-1">
+            <FontAwesomeIcon icon={faCrown} className="me-1" />
+            {sub.plan?.name || 'Gói không xác định'}
+          </span>
         </td>
-        <td data-label="Giá" className="align-middle">
+        <td className="fw-semibold text-success">
           {(sub.total_price || 0).toLocaleString('vi-VN')} ₫
         </td>
-        <td data-label="Thời hạn" className="align-middle">
-          {new Date(sub.start_date).toLocaleDateString('vi-VN')} - {new Date(sub.end_date).toLocaleDateString('vi-VN')}
+        <td className="small text-muted">
+          {new Date(sub.start_date).toLocaleDateString('vi-VN')}
+          <br />
+          → {new Date(sub.end_date).toLocaleDateString('vi-VN')}
         </td>
-        <td data-label="Trạng thái" className="align-middle">
-          {sub.status === 'pending' && <span className="badge bg-warning-subtle text-warning">Chờ duyệt</span>}
-          {sub.status === 'approved' && <span className="badge bg-success-subtle text-success">Đã duyệt</span>}
-          {sub.status === 'rejected' && <span className="badge bg-danger-subtle text-danger">Từ chối</span>}
-        </td>
-        <td data-label="Thao tác" className="align-middle">
+        <td>
           {sub.status === 'pending' && (
-            <>
-              <button className="btn btn-sm btn-outline-success me-2" title="Phê duyệt" onClick={() => handleActionClick(sub.id, 'approve')}>
-                <FontAwesomeIcon icon={faCheck} />
-              </button>
-              <button className="btn btn-sm btn-outline-warning" title="Từ chối" onClick={() => handleActionClick(sub.id, 'reject')}>
-                <FontAwesomeIcon icon={faTimes} />
-              </button>
-            </>
+            <span className="badge bg-warning text-dark px-2 py-1">
+              <FontAwesomeIcon icon={faClock} /> Chờ duyệt
+            </span>
           )}
-          {sub.status !== 'pending' && (
-            <button className="btn btn-sm btn-outline-danger" title="Xóa" onClick={() => handleDeleteClick(sub.id)}>
-              <FontAwesomeIcon icon={faTrash} />
+          {sub.status === 'approved' && sub.is_active && (
+            <span className="badge bg-success px-2 py-1">
+              <FontAwesomeIcon icon={faCheck} /> Hoạt động
+            </span>
+          )}
+          {sub.status === 'approved' && !sub.is_active && (
+            <span className="badge bg-secondary px-2 py-1">
+              <FontAwesomeIcon icon={faTimes} /> Hết hạn
+            </span>
+          )}
+          {sub.status === 'rejected' && (
+            <span className="badge bg-danger px-2 py-1">
+              <FontAwesomeIcon icon={faTimes} /> Từ chối
+            </span>
+          )}
+        </td>
+        <td className="small text-muted">
+          {sub.created_at ? new Date(sub.created_at).toLocaleDateString('vi-VN') : 'N/A'}
+        </td>
+        <td>
+          <div className="btn-group btn-group-sm shadow-sm">
+            {sub.status === 'pending' && (
+              <>
+                <button 
+                  className="btn btn-success btn-sm"
+                  onClick={() => handleActionClick(sub.id, 'approve', sub.user!)}
+                  title="Phê duyệt"
+                  disabled={!!actionLoading}
+                >
+                  {actionLoading === `action-${sub.id}` ? <FontAwesomeIcon icon={faSpinner} spin /> : <FontAwesomeIcon icon={faCheck} />}
+                </button>
+                <button 
+                  className="btn btn-warning btn-sm"
+                  onClick={() => handleActionClick(sub.id, 'reject', sub.user!)}
+                  title="Từ chối"
+                  disabled={!!actionLoading}
+                >
+                  <FontAwesomeIcon icon={faTimes} />
+                </button>
+              </>
+            )}
+            <button 
+              className="btn btn-danger btn-sm"
+              onClick={() => handleDeleteClick(sub.id)}
+              title="Xóa"
+              disabled={!!actionLoading}
+            >
+              {actionLoading === `delete-${sub.id}` ? <FontAwesomeIcon icon={faSpinner} spin /> : <FontAwesomeIcon icon={faTrash} />}
             </button>
-          )}
+          </div>
         </td>
       </tr>
     ));
   };
 
-  const renderModals = () => {
-    if (!modalRoot) return null;
-
-    return createPortal(
-      <>
-        {(showActionModal || showDeleteModal) && <div className="modal-backdrop fade show"></div>}
-
-        {/* Modal Phê duyệt/Từ chối */}
-        {showActionModal && (
-          <div className="modal fade show" style={{ display: 'block', zIndex: 9999 }} tabIndex={-1}>
-            <div className="modal-dialog modal-dialog-centered">
-              <div className="modal-content">
-                <form onSubmit={handleConfirmAction}>
-                  <div className="modal-header">
-                    <h5 className="modal-title">
-                      {actionType === 'approve' ? 'Phê duyệt Đăng ký' : 'Từ chối Đăng ký'}
-                    </h5>
-                    <button type="button" className="btn-close" onClick={handleCloseModals} disabled={isSaving}></button>
-                  </div>
-                  <div className="modal-body">
-                    {actionError && <div className="alert alert-danger">{actionError}</div>}
-                    <p>Bạn có chắc chắn muốn {actionType === 'approve' ? 'phê duyệt' : 'từ chối'} lượt đăng ký này?</p>
-                    <div className="mb-3">
-                      <label htmlFor="notes" className="form-label">Ghi chú (Tùy chọn)</label>
-                      <textarea
-                        className="form-control"
-                        id="notes"
-                        rows={3}
-                        value={actionNotes}
-                        onChange={(e) => setActionNotes(e.target.value)}
-                        placeholder={actionType === 'reject' ? 'Lý do từ chối...' : 'Ghi chú nội bộ...'}
-                      ></textarea>
-                    </div>
-                  </div>
-                  <div className="modal-footer">
-                    <button type="button" className="btn btn-secondary" onClick={handleCloseModals} disabled={isSaving}>Hủy</button>
-                    <button type="submit" className={`btn ${actionType === 'approve' ? 'btn-success' : 'btn-warning'}`} disabled={isSaving}>
-                      {isSaving ? <FontAwesomeIcon icon={faSpinner} spin /> : 'Xác nhận'}
-                    </button>
-                  </div>
-                </form>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Modal Xóa */}
-        {showDeleteModal && (
-          <div className="modal fade show" style={{ display: 'block', zIndex: 9999 }} tabIndex={-1}>
-            <div className="modal-dialog modal-dialog-centered">
-              <div className="modal-content">
-                <div className="modal-header"><h5 className="modal-title">Xác nhận xóa</h5><button type="button" className="btn-close" onClick={handleCloseModals} disabled={isDeleting}></button></div>
-                <div className="modal-body">
-                  {deleteError && <div className="alert alert-danger">{deleteError}</div>}
-                  <p>Bạn có chắc chắn muốn xóa lượt đăng ký này không?</p>
-                </div>
-                <div className="modal-footer">
-                  <button type="button" className="btn btn-secondary" onClick={handleCloseModals} disabled={isDeleting}>Hủy</button>
-                  <button type="button" className="btn btn-danger" onClick={handleConfirmDelete} disabled={isDeleting}>{isDeleting ? 'Đang xóa...' : 'Xác nhận xóa'}</button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-      </>,
-      modalRoot
-    );
-  };
-
   return (
-    <>
-      <div className="col-12 main-content-right d-flex flex-column gap-3 gap-lg-4">
-        
-        {/* Stats Row */}
-        <div className="row g-3 g-lg-4">
-          <div className="col-6 col-md-3"><StatCard title="Tổng đăng ký" value={loading ? '...' : subscriptions.length.toString()} colorType="primary" icon="fas fa-users" /></div>
-          <div className="col-6 col-md-3"><StatCard title="Chờ phê duyệt" value={loading ? '...' : subscriptions.filter(s => s.status === 'pending').length.toString()} colorType="warning" icon="fas fa-clock" /></div>
-          <div className="col-6 col-md-3"><StatCard title="Đã kích hoạt" value={loading ? '...' : subscriptions.filter(s => s.status === 'approved' && s.is_active).length.toString()} colorType="success" icon="fas fa-check-circle" /></div>
-          <div className="col-6 col-md-3"><StatCard title="Đã từ chối" value={loading ? '...' : subscriptions.filter(s => s.status === 'rejected').length.toString()} colorType="danger" icon="fas fa-times-circle" /></div>
+    <div className="container-fluid px-4 py-3">
+      {/* Header */}
+      <div className="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-4 gap-3">
+        <div>
+          <h1 className="h3 mb-1 text-dark fw-bold d-flex align-items-center">
+            <FontAwesomeIcon icon={faCrown} className="me-2 text-primary" />
+            Quản lý Quyền Chatbot
+          </h1>
+          <p className="text-muted mb-0 small">Phê duyệt, từ chối và quản lý đăng ký sử dụng chatbot AI</p>
         </div>
+        <button 
+          className="btn btn-primary btn-sm d-flex align-items-center shadow-sm"
+          onClick={loadSubscriptions}
+          disabled={loading}
+        >
+          <FontAwesomeIcon icon={faSync} className={`me-1 ${loading ? 'fa-spin' : ''}`} />
+          {loading ? 'Đang tải...' : 'Làm mới'}
+        </button>
+      </div>
 
-        {/* Bảng Dữ liệu */}
-        <div className="table-card">
-          <div className="card-header p-0">
-            {/* Tabs Navigation */}
-            <ul className="nav page-tabs" role="tablist">
-              <li className="nav-item" role="presentation">
-                <button
-                  className={`nav-link ${activeTab === 'pending' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('pending')} type="button"
-                >
-                  <FontAwesomeIcon icon={faClock} className="me-2" />
-                  Chờ phê duyệt
-                  <span className="badge rounded-pill bg-warning ms-2">
-                    {loading ? '...' : subscriptions.filter(s => s.status === 'pending').length}
-                  </span>
-                </button>
-              </li>
-              <li className="nav-item" role="presentation">
-                <button
-                  className={`nav-link ${activeTab === 'approved' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('approved')} type="button"
-                >
-                  <FontAwesomeIcon icon={faCheck} className="me-2" />
-                  Đã phê duyệt
-                </button>
-              </li>
-              <li className="nav-item" role="presentation">
-                <button
-                  className={`nav-link ${activeTab === 'all' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('all')} type="button"
-                >
-                  Tất cả
-                </button>
-              </li>
-            </ul>
+      {/* Stats Cards */}
+      <div className="row g-3 mb-4">
+        <div className="col-6 col-lg-3">
+          <div className="card border-0 shadow-sm h-100 position-relative overflow-hidden" 
+               style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+            <div className="card-body text-white position-relative z-1">
+              <div className="d-flex justify-content-between align-items-center">
+                <div>
+                  <h6 className="mb-1 opacity-75">Tổng đăng ký</h6>
+                  <h3 className="mb-0 fw-bold">{stats.total}</h3>
+                </div>
+                <FontAwesomeIcon icon={faUsers} size="2x" className="opacity-50" />
+              </div>
+            </div>
           </div>
-          
-          <div className="card-body p-0">
-            <div className="table-responsive services-table">
-              <table className="table table-hover align-middle mb-0">
-                <thead className="table-light">
-                  <tr>
-                    <th style={{ paddingLeft: '1.5rem' }}>Người dùng</th>
-                    <th>Gói</th>
-                    <th>Giá</th>
-                    <th>Thời hạn</th>
-                    <th>Trạng thái</th>
-                    <th>Thao tác</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {renderSubscriptionTable()}
-                </tbody>
-              </table>
+        </div>
+        <div className="col-6 col-lg-3">
+          <div className="card border-0 shadow-sm h-100" 
+               style={{ background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)' }}>
+            <div className="card-body text-white">
+              <div className="d-flex justify-content-between align-items-center">
+                <div>
+                  <h6 className="mb-1 opacity-75">Chờ duyệt</h6>
+                  <h3 className="mb-0 fw-bold">{stats.pending}</h3>
+                </div>
+                <FontAwesomeIcon icon={faClock} size="2x" className="opacity-50" />
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="col-6 col-lg-3">
+          <div className="card border-0 shadow-sm h-100" 
+               style={{ background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)' }}>
+            <div className="card-body text-white">
+              <div className="d-flex justify-content-between align-items-center">
+                <div>
+                  <h6 className="mb-1 opacity-75">Đang hoạt động</h6>
+                  <h3 className="mb-0 fw-bold">{stats.active}</h3>
+                </div>
+                <FontAwesomeIcon icon={faCheckCircle} size="2x" className="opacity-50" />
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="col-6 col-lg-3">
+          <div className="card border-0 shadow-sm h-100" 
+               style={{ background: 'linear-gradient(135deg, #ff9a9e 0%, #fad0c4 100%)' }}>
+            <div className="card-body text-white">
+              <div className="d-flex justify-content-between align-items-center">
+                <div>
+                  <h6 className="mb-1 opacity-75">Đã từ chối</h6>
+                  <h3 className="mb-0 fw-bold">{stats.rejected}</h3>
+                </div>
+                <FontAwesomeIcon icon={faTimesCircle} size="2x" className="opacity-50" />
+              </div>
             </div>
           </div>
         </div>
       </div>
-      
-      {renderModals()}
-    </>
+
+      {/* Tabs + Table */}
+      <div className="card shadow-sm border-0 overflow-hidden">
+        <div className="card-header bg-white p-3">
+          <ul className="nav nav-tabs card-header-tabs border-0 m-0">
+            {[
+              { key: 'pending', icon: faClock, label: 'Chờ duyệt', count: stats.pending, color: 'warning' },
+              { key: 'approved', icon: faCheck, label: 'Đã duyệt', count: stats.approved },
+              { key: 'rejected', icon: faTimes, label: 'Từ chối', count: stats.rejected, color: 'danger' },
+              { key: 'all', icon: faUsers, label: 'Tất cả', count: stats.total },
+            ].map(tab => (
+              <li key={tab.key} className="nav-item">
+                <button
+                  className={`nav-link d-flex align-items-center gap-2 px-3 py-2 rounded-3 transition-all ${
+                    activeTab === tab.key ? 'active bg-primary text-white' : 'text-muted'
+                  }`}
+                  onClick={() => setActiveTab(tab.key as any)}
+                  style={{ minWidth: '120px' }}
+                >
+                  <FontAwesomeIcon icon={tab.icon} />
+                  {tab.label}
+                  {tab.count > 0 && (
+                    <span className={`badge ms-1 ${activeTab === tab.key ? 'bg-white text-primary' : `bg-${tab.color || 'secondary'} text-white`}`}>
+                      {tab.count}
+                    </span>
+                  )}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div className="card-body p-0">
+          <div className="table-responsive">
+            <table className="table table-hover align-middle mb-0">
+              <thead className="bg-gradient text-white" style={{ background: 'linear-gradient(90deg, #667eea, #764ba2)' }}>
+                <tr>
+                  <th className="ps-4">Người dùng</th>
+                  <th>Gói</th>
+                  <th>Giá</th>
+                  <th>Thời hạn</th>
+                  <th>Trạng thái</th>
+                  <th>Ngày tạo</th>
+                  <th className="text-center" style={{ width: '130px' }}>Thao tác</th>
+                </tr>
+              </thead>
+              <tbody>
+                {renderSubscriptionTable()}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      {/* === MODAL PORTAL === */}
+      {modalRoot && createPortal(
+        <>
+          {/* Backdrop */}
+          {(showActionModal || showDeleteModal) && (
+            <div className="modal-backdrop fade show" style={{ zIndex: 1040 }} />
+          )}
+
+          {/* Action Modal */}
+          {showActionModal && selectedUser && (
+            <div className="modal fade show d-block" style={{ zIndex: 1050 }} tabIndex={-1}>
+              <div className="modal-dialog modal-dialog-centered">
+                <div className="modal-content shadow-lg">
+                  <form onSubmit={handleConfirmAction}>
+                    <div className={`modal-header ${actionType === 'approve' ? 'bg-success' : 'bg-warning'} text-white`}>
+                      <h5 className="modal-title">
+                        <FontAwesomeIcon icon={actionType === 'approve' ? faCheckCircle : faTimesCircle} className="me-2" />
+                        {actionType === 'approve' ? 'Phê duyệt đăng ký' : 'Từ chối đăng ký'}
+                      </h5>
+                      <button type="button" className="btn-close btn-close-white" onClick={handleCloseModals} disabled={!!actionLoading} />
+                    </div>
+                    <div className="modal-body">
+                      <div className="alert alert-info d-flex justify-content-between align-items-center mb-3">
+                        <div>
+                          <strong>Người dùng:</strong> {selectedUser.full_name || 'N/A'} 
+                          <span className="text-muted">({selectedUser.email})</span>
+                        </div>
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-outline-info"
+                          onClick={() => {
+                            navigator.clipboard.writeText(selectedUser.email);
+                            toast.success('Đã sao chép email');
+                          }}
+                        >
+                          <FontAwesomeIcon icon={faCopy} />
+                        </button>
+                      </div>
+
+                      <div className="mb-3">
+                        <label className="form-label">
+                          {actionType === 'reject' ? 'Lý do từ chối *' : 'Ghi chú (tùy chọn)'}
+                        </label>
+                        <textarea
+                          className="form-control"
+                          rows={4}
+                          value={actionNotes}
+                          onChange={(e) => setActionNotes(e.target.value)}
+                          placeholder={actionType === 'reject' ? 'Bắt buộc nhập lý do...' : 'Ghi chú nội bộ...'}
+                          required={actionType === 'reject'}
+                          disabled={!!actionLoading}
+                        />
+                      </div>
+                    </div>
+                    <div className="modal-footer bg-light">
+                      <button type="button" className="btn btn-secondary" onClick={handleCloseModals} disabled={!!actionLoading}>
+                        Hủy
+                      </button>
+                      <button
+                        type="submit"
+                        className={`btn ${actionType === 'approve' ? 'btn-success' : 'btn-warning'}`}
+                        disabled={!!actionLoading || (actionType === 'reject' && !actionNotes.trim())}
+                      >
+                        {actionLoading ? (
+                          <>Đang xử lý <FontAwesomeIcon icon={faSpinner} spin className="ms-2" /></>
+                        ) : (
+                          actionType === 'approve' ? 'Phê duyệt' : 'Từ chối'
+                        )}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Delete Modal */}
+          {showDeleteModal && (
+            <div className="modal fade show d-block" style={{ zIndex: 1050 }} tabIndex={-1}>
+              <div className="modal-dialog modal-dialog-centered">
+                <div className="modal-content shadow-lg">
+                  <div className="modal-header bg-danger text-white">
+                    <h5 className="modal-title">
+                      <FontAwesomeIcon icon={faExclamationTriangle} className="me-2" />
+                      Xác nhận xóa
+                    </h5>
+                    <button type="button" className="btn-close btn-close-white" onClick={handleCloseModals} disabled={!!actionLoading} />
+                  </div>
+                  <div className="modal-body">
+                    <div className="alert alert-warning">
+                      <strong>Cảnh báo:</strong> Hành động này <strong>không thể hoàn tác</strong>.
+                    </div>
+                    <p>Bạn có chắc chắn muốn xóa đăng ký này?</p>
+                  </div>
+                  <div className="modal-footer bg-light">
+                    <button type="button" className="btn btn-secondary" onClick={handleCloseModals} disabled={!!actionLoading}>
+                      Hủy
+                    </button>
+                    <button type="button" className="btn btn-danger" onClick={handleConfirmDelete} disabled={!!actionLoading}>
+                      {actionLoading ? (
+                        <>Đang xóa <FontAwesomeIcon icon={faSpinner} spin className="ms-2" /></>
+                      ) : (
+                        'Xác nhận xóa'
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </>,
+        modalRoot
+      )}
+    </div>
   );
 };
 

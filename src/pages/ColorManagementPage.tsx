@@ -1,403 +1,626 @@
 // src/pages/ColorManagementPage.tsx
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import StatCard from '../components/StatCard';
+import toast from 'react-hot-toast';
+import * as XLSX from 'xlsx';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faEdit, faTrash, faPlus } from '@fortawesome/free-solid-svg-icons';
-import { PaginationMetadata } from '../types/response';
+import {
+  faPlus, faEdit, faTrash, faDownload,
+  faChevronLeft, faChevronRight, faAnglesLeft, faAnglesRight,
+  faSearch, faSync, faPalette
+} from '@fortawesome/free-solid-svg-icons';
 
-// Import Types và Service
-import { ColorRead, ColorCreate, ColorUpdate } from '../types/device';
 import { colorService } from '../services/colorService';
+import { Color } from '../types/color';
 
-// Lấy element root của modal (cho Portal)
 const modalRoot = document.getElementById('modal-root');
+const ITEMS_PER_PAGE = 10;
 
-// === Trạng thái form ban đầu ===
-const initialFormState: ColorCreate = {
+interface ColorFormData {
+  name: string;
+  hex_code: string | null;
+}
+
+const initialFormState: ColorFormData = {
   name: '',
-  hex_code: '#ffffff' // Mặc định là màu trắng
+  hex_code: null,
 };
 
 const ColorManagementPage: React.FC = () => {
-
-  // === STATE DỮ LIỆU ===
-  const [colors, setColors] = useState<ColorRead[]>([]);
+  const [colors, setColors] = useState<Color[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [pagination, setPagination] = useState<PaginationMetadata | null>(null);
+  const [pagination, setPagination] = useState({ total: 0, page: 1, pages: 1 });
+  const [currentPage, setCurrentPage] = useState(1);
+  const [searchTerm, setSearchTerm] = useState('');
 
-  // === STATE CHO MODAL & FORM ===
   const [showModal, setShowModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [modalError, setModalError] = useState<string | null>(null);
-  const [currentData, setCurrentData] = useState<ColorCreate | ColorUpdate>(initialFormState);
+  const [currentData, setCurrentData] = useState<ColorFormData>(initialFormState);
   const [isEditMode, setIsEditMode] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
 
-  // === STATE CHO MODAL XÓA ===
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  // === TẢI DỮ LIỆU KHI MỞ TRANG ===
-  useEffect(() => {
-    const titleElement = document.getElementById('pageTitle');
-    const subtitleElement = document.getElementById('pageSubtitle');
-    if (titleElement) titleElement.innerText = 'Quản lý Màu sắc';
-    if (subtitleElement) subtitleElement.innerText = 'Thêm, sửa, xóa các tùy chọn màu sắc';
-    
-    loadAllData();
-  }, []);
+  const [selectedColors, setSelectedColors] = useState<string[]>([]);
+  const [selectAll, setSelectAll] = useState(false);
 
-  const loadAllData = async () => {
+  const loadColors = async (page: number = 1, search: string = '') => {
+    setLoading(true);
+    setError(null);
+
+    const validPage = isNaN(page) || page < 1 ? 1 : page;
+    const skip = (validPage - 1) * ITEMS_PER_PAGE;
+
     try {
-      setLoading(true);
-      setError(null);
-      
-      const response = await colorService.getAllColors();
-      
-      setColors(response.data);
-      if (response.metadata) {
-        setPagination(response.metadata);
-      } else {
-        setPagination({ page: 1, limit: 100, total: response.data.length, total_pages: 1 });
-      }
+      const params: any = { skip, limit: ITEMS_PER_PAGE };
+      if (search.trim()) params.search = search.trim();
 
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Lỗi tải màu sắc');
-      setColors([]);
+      const response = await colorService.getAllColors(params);
+      setColors(response.data || []);
+      setPagination({
+        total: response.total || 0,
+        page: response.page || validPage,
+        pages: response.totalPages || 1
+      });
+      setCurrentPage(validPage);
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Lỗi tải dữ liệu');
+      console.error('API Error:', err.response?.data);
     } finally {
       setLoading(false);
     }
   };
-  
-  // === CÁC HÀM XỬ LÝ SỰ KIỆN ===
-  const handleAddNewClick = () => {
+
+  useEffect(() => {
+    const page = isNaN(currentPage) || currentPage < 1 ? 1 : currentPage;
+    loadColors(page, searchTerm);
+  }, [currentPage, searchTerm]);
+
+  const handlePageChange = (page: number) => {
+    if (isNaN(page) || page < 1 || page > pagination.pages) return;
+    setCurrentPage(page);
+  };
+
+  const handleAddNew = () => {
     setCurrentData(initialFormState);
     setIsEditMode(false);
     setEditId(null);
-    setModalError(null);
     setShowModal(true);
   };
 
-  const handleEditClick = (color: ColorRead) => {
-    setIsEditMode(true);
-    setEditId(color.id);
-    
+  const handleEdit = (color: Color) => {
     setCurrentData({
       name: color.name,
-      hex_code: color.hex_code
+      hex_code: color.hex_code || null,
     });
-    setModalError(null);
+    setIsEditMode(true);
+    setEditId(color.id);
     setShowModal(true);
   };
 
-  const handleCloseModal = () => { if (isSaving) return; setShowModal(false); };
-
-  const handleFormChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setCurrentData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-  };
-
-  const handleFormSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
     setModalError(null);
 
     try {
-      // Chuẩn bị dữ liệu đúng định dạng
-      const requestData = {
-        name: currentData.name?.trim() || '',
-        hex_code: currentData.hex_code?.trim() || null
-      };
-
-      // Validate dữ liệu
-      if (!requestData.name) {
-        setModalError('Tên màu là bắt buộc');
-        setIsSaving(false);
-        return;
-      }
-
       if (isEditMode && editId) {
-        // Cập nhật
-        const response = await colorService.updateColor(editId, requestData);
-        setColors(prev => prev.map(c => (c.id === editId ? response.data : c)));
+        await colorService.updateColor(editId, currentData);
+        toast.success('Cập nhật thành công');
       } else {
-        // Thêm mới
-        const response = await colorService.createColor(requestData);
-        setColors(prev => [response.data, ...prev]);
+        await colorService.createColor(currentData);
+        toast.success('Thêm thành công');
       }
-      handleCloseModal();
-    } catch (err) {
-      setModalError(err instanceof Error ? err.message : 'Lỗi không xác định');
+      setShowModal(false);
+      loadColors(currentPage, searchTerm);
+      setSelectedColors([]);
+      setSelectAll(false);
+    } catch (err: any) {
+      setModalError(err.response?.data?.message || 'Lỗi khi lưu');
     } finally {
       setIsSaving(false);
     }
   };
 
-  // --- Xử lý Xóa ---
-  const handleDeleteClick = (color: ColorRead) => { 
-    setDeleteId(color.id); 
-    setDeleteError(null); 
-    setShowDeleteModal(true); 
+  const handleDelete = (id: string) => {
+    setDeleteId(id);
+    setShowDeleteModal(true);
   };
 
-  const handleCloseDeleteModal = () => { 
-    if (isDeleting) return; 
-    setShowDeleteModal(false); 
-    setDeleteId(null); 
-  };
-
-  const handleConfirmDelete = async () => {
+  const confirmDelete = async () => {
     if (!deleteId) return;
     setIsDeleting(true);
-    setDeleteError(null);
     try {
-      await colorService.deleteColor(deleteId); 
-      setColors(prev => prev.filter(c => c.id !== deleteId));
-      handleCloseDeleteModal();
-    } catch (err) {
-      setDeleteError(err instanceof Error ? err.message : 'Lỗi khi xóa');
+      await colorService.deleteColor(deleteId);
+      toast.success('Xóa thành công');
+      setShowDeleteModal(false);
+      loadColors(currentPage, searchTerm);
+      setSelectedColors([]);
+      setSelectAll(false);
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Lỗi xóa');
     } finally {
       setIsDeleting(false);
     }
   };
 
-  // === HÀM RENDER BẢNG ===
-  const renderColorTable = () => {
-    if (loading) return <tr><td colSpan={4} className="text-center py-5"><div className="spinner-border text-primary" role="status"></div></td></tr>;
-    if (error) return <tr><td colSpan={4} className="text-center text-danger py-4">{error}</td></tr>;
-    if (colors.length === 0) return <tr><td colSpan={4} className="text-center py-5 text-muted">Chưa có màu sắc nào.</td></tr>;
+  const handleSelectAll = () => {
+    if (selectAll) {
+      setSelectedColors([]);
+    } else {
+      setSelectedColors(colors.map(c => c.id));
+    }
+    setSelectAll(!selectAll);
+  };
 
-    return colors.map((color) => (
-      <tr key={color.id}>
-        <td data-label="Tên màu" className="align-middle" style={{ paddingLeft: '1.5rem' }}>
-          <strong>{color.name}</strong>
-        </td>
-        <td data-label="Mã HEX" className="align-middle">
-          <div className="d-flex align-items-center gap-2">
-            <span 
-              className="color-preview rounded border"
-              style={{ 
-                backgroundColor: color.hex_code || '#ffffff', 
-                width: '20px', 
-                height: '20px',
-                border: color.hex_code === '#ffffff' || !color.hex_code ? '1px solid #ccc' : 'none'
-              }}
-            ></span>
-            {color.hex_code || 'N/A'}
+  const handleSelectColor = (id: string) => {
+    setSelectedColors(prev =>
+      prev.includes(id) ? prev.filter(sid => sid !== id) : [...prev, id]
+    );
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedColors.length === 0) return;
+    if (!window.confirm(`Xóa ${selectedColors.length} màu?`)) return;
+
+    setLoading(true);
+    try {
+      for (const id of selectedColors) {
+        await colorService.deleteColor(id);
+      }
+      toast.success('Xóa hàng loạt thành công');
+      loadColors(currentPage, searchTerm);
+      setSelectedColors([]);
+      setSelectAll(false);
+    } catch (err) {
+      toast.error('Lỗi xóa hàng loạt');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleExportExcel = () => {
+    const data = colors.map(c => ({
+      ID: c.id,
+      'Tên màu': c.name,
+      'Mã HEX': c.hex_code || 'N/A',
+      'Người tạo': c.user_id || 'N/A',
+      'Ngày tạo': new Date(c.created_at).toLocaleDateString('vi-VN'),
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Màu sắc');
+    XLSX.writeFile(wb, 'colors.xlsx');
+  };
+
+  const renderTable = () => {
+    if (loading) {
+      return Array.from({ length: 5 }).map((_, i) => (
+        <tr key={i}>
+          <td colSpan={5} className="py-4">
+            <div className="d-flex align-items-center p-3">
+              <div className="placeholder-glow w-100">
+                <div className="placeholder col-6 h-4 rounded"></div>
+                <div className="placeholder col-4 h-3 rounded mt-2"></div>
+              </div>
+            </div>
+          </td>
+        </tr>
+      ));
+    }
+
+    if (error) {
+      return (
+        <tr>
+          <td colSpan={5} className="text-center py-5">
+            <div className="alert alert-danger d-inline-block p-4 rounded-3 shadow-sm">
+              <FontAwesomeIcon icon={faPalette} className="me-2" />
+              {error}
+            </div>
+          </td>
+        </tr>
+      );
+    }
+
+    if (colors.length === 0) {
+      return (
+        <tr>
+          <td colSpan={5} className="text-center py-5 text-muted">
+            <FontAwesomeIcon icon={faSearch} size="3x" className="mb-3 opacity-25" />
+            <p className="mb-1 fw-medium">Không có màu nào</p>
+            <small>Nhấn <strong>"Thêm màu"</strong> để bắt đầu</small>
+          </td>
+        </tr>
+      );
+    }
+
+    return colors.map(color => (
+      <tr key={color.id} className="align-middle transition-all hover-bg-light">
+        <td className="ps-4 py-3">
+          <div className="form-check">
+            <input
+              type="checkbox"
+              className="form-check-input"
+              checked={selectedColors.includes(color.id)}
+              onChange={() => handleSelectColor(color.id)}
+            />
+            <label className="form-check-label fw-medium text-dark ms-2">
+              {color.name}
+            </label>
           </div>
         </td>
-        <td data-label="Ngày tạo" className="align-middle">
+        <td>
+          <div className="d-flex align-items-center">
+            <div
+              className="me-3 rounded-3 shadow-sm"
+              style={{
+                width: 40,
+                height: 40,
+                backgroundColor: color.hex_code || '#ccc',
+                border: '2px solid #fff',
+                boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
+              }}
+            />
+            <span className="font-monospace small fw-medium">{color.hex_code || 'N/A'}</span>
+          </div>
+        </td>
+        <td className="text-muted small">{color.user_id || 'N/A'}</td>
+        <td className="text-muted small">
           {new Date(color.created_at).toLocaleDateString('vi-VN')}
         </td>
-        <td data-label="Thao tác" className="align-middle">
-          <button className="btn btn-sm btn-outline-primary me-1 py-0 px-1" onClick={() => handleEditClick(color)} title="Sửa">
-            <FontAwesomeIcon icon={faEdit} />
-          </button>
-          <button className="btn btn-sm btn-outline-danger py-0 px-1" onClick={() => handleDeleteClick(color)} title="Xóa">
-            <FontAwesomeIcon icon={faTrash} />
-          </button>
+        <td className="text-center">
+          <div className="btn-group btn-group-sm">
+            <button
+              className="btn btn-outline-primary rounded-pill px-3"
+              onClick={() => handleEdit(color)}
+            >
+              <FontAwesomeIcon icon={faEdit} />
+            </button>
+            <button
+              className="btn btn-outline-danger rounded-pill px-3"
+              onClick={() => handleDelete(color.id)}
+            >
+              <FontAwesomeIcon icon={faTrash} />
+            </button>
+          </div>
         </td>
       </tr>
     ));
   };
 
-  // === HÀM RENDER MODALS (VỚI PORTAL + Z-INDEX) ===
-  const renderModals = () => {
-    if (!modalRoot) return null; 
+  const renderPagination = () => {
+    if (pagination.pages <= 1) return null;
 
-    const deleteColor = colors.find(c => c.id === deleteId);
+    const delta = 1;
+    const pages = [];
+    for (let i = Math.max(1, currentPage - delta); i <= Math.min(pagination.pages, currentPage + delta); i++) {
+      pages.push(i);
+    }
+    if (pages[0] > 1) pages.unshift(1);
+    if (pages[pages.length - 1] < pagination.pages) pages.push(pagination.pages);
+
+    return (
+      <div className="d-flex justify-content-center align-items-center gap-1 mt-3">
+        <button className="btn btn-sm btn-outline-secondary rounded-pill px-3" onClick={() => handlePageChange(1)} disabled={currentPage === 1}>
+          <FontAwesomeIcon icon={faAnglesLeft} />
+        </button>
+        <button className="btn btn-sm btn-outline-secondary rounded-pill px-3" onClick={() => handlePageChange(currentPage - 1)} disabled={currentPage === 1}>
+          <FontAwesomeIcon icon={faChevronLeft} />
+        </button>
+        {pages.map((p, i) => (
+          <React.Fragment key={p}>
+            {pages[i - 1] && pages[i - 1] + 1 < p && (
+              <span className="px-2 text-muted">...</span>
+            )}
+            <button
+              className={`btn btn-sm rounded-pill ${p === currentPage ? 'btn-primary text-white' : 'btn-outline-secondary'} px-3`}
+              onClick={() => handlePageChange(p)}
+            >
+              {p}
+            </button>
+          </React.Fragment>
+        ))}
+        <button className="btn btn-sm btn-outline-secondary rounded-pill px-3" onClick={() => handlePageChange(currentPage + 1)} disabled={currentPage === pagination.pages}>
+          <FontAwesomeIcon icon={faChevronRight} />
+        </button>
+        <button className="btn btn-sm btn-outline-secondary rounded-pill px-3" onClick={() => handlePageChange(pagination.pages)} disabled={currentPage === pagination.pages}>
+          <FontAwesomeIcon icon={faAnglesRight} />
+        </button>
+      </div>
+    );
+  };
+
+  const renderModal = () => {
+    if (!modalRoot || !showModal) return null;
 
     return createPortal(
-      <>
-        {(showModal || showDeleteModal) && <div className="modal-backdrop fade show"></div>}
-        
-        {showModal && (
-          <div className="modal fade show" style={{ display: 'block', zIndex: 9999 }} tabIndex={-1}>
-            <div className="modal-dialog modal-dialog-centered">
-              <div className="modal-content">
-                <form id="colorForm" onSubmit={handleFormSubmit}>
-                  <div className="modal-header">
-                    <h5 className="modal-title">{isEditMode ? 'Cập nhật Màu sắc' : 'Thêm Màu sắc mới'}</h5>
-                    <button type="button" className="btn-close" onClick={handleCloseModal} disabled={isSaving}></button>
-                  </div>
-                  <div className="modal-body">
-                    {modalError && <div className="alert alert-danger">{modalError}</div>}
-                    
-                    <div className="mb-3">
-                      <label htmlFor="name" className="form-label">Tên màu *</label>
-                      <input 
-                        type="text" 
-                        className="form-control" 
-                        id="name" 
-                        name="name" 
-                        value={currentData.name || ''} 
-                        onChange={handleFormChange} 
-                        required 
-                        disabled={isSaving}
-                      />
-                    </div>
-
-                    <div className="mb-3">
-                      <label htmlFor="hex_code" className="form-label">Mã màu HEX (ví dụ: #FF0000)</label>
-                      <input 
-                        type="text" 
-                        className="form-control" 
-                        id="hex_code" 
-                        name="hex_code" 
-                        value={currentData.hex_code || ''} 
-                        onChange={handleFormChange} 
-                        placeholder="#FFFFFF" 
-                        disabled={isSaving}
-                      />
-                      <div className="mt-2" style={{ display: 'flex', alignItems: 'center' }}>
-                         <span style={{ marginRight: '10px' }}>Xem trước:</span>
-                         <div 
-                           className="color-preview rounded border" 
-                           style={{ 
-                              backgroundColor: currentData.hex_code || '#ffffff', 
-                              width: '50px', 
-                              height: '25px',
-                              border: currentData.hex_code === '#ffffff' || !currentData.hex_code ? '1px solid #ccc' : 'none'
-                           }}
-                         ></div>
-                      </div>
-                    </div>
-
-                  </div>
-                  <div className="modal-footer">
-                    <button type="button" className="btn btn-secondary" onClick={handleCloseModal} disabled={isSaving}>Hủy</button>
-                    <button type="submit" form="colorForm" className="btn btn-primary" disabled={isSaving}>
-                      {isSaving ? (
-                        <>
-                          <span className="spinner-border spinner-border-sm me-2" role="status"></span>
-                          Đang lưu...
-                        </>
-                      ) : (
-                        'Lưu thay đổi'
-                      )}
-                    </button>
-                  </div>
-                </form>
+      <div className="modal fade show d-block" style={{ zIndex: 1050, backgroundColor: 'rgba(0,0,0,0.5)' }}>
+        <div className="modal-dialog modal-dialog-centered">
+          <div className="modal-content shadow-lg rounded-3 overflow-hidden">
+            <form onSubmit={handleSubmit}>
+              <div
+                className="modal-header text-white"
+                style={{ background: 'linear-gradient(135deg, #667eea, #764ba2)' }}
+              >
+                <h5 className="modal-title fw-bold d-flex align-items-center">
+                  <FontAwesomeIcon icon={faPalette} className="me-2" />
+                  {isEditMode ? 'Cập nhật màu' : 'Thêm màu mới'}
+                </h5>
+                <button
+                  type="button"
+                  className="btn-close btn-close-white"
+                  onClick={() => setShowModal(false)}
+                  disabled={isSaving}
+                />
               </div>
-            </div>
-          </div>
-        )}
-        
-        {showDeleteModal && (
-          <div className="modal fade show" style={{ display: 'block', zIndex: 9999 }} tabIndex={-1}>
-            <div className="modal-dialog modal-dialog-centered">
-              <div className="modal-content">
-                <div className="modal-header">
-                  <h5 className="modal-title">Xác nhận xóa</h5>
-                  <button type="button" className="btn-close" onClick={handleCloseDeleteModal} disabled={isDeleting}></button>
+
+              <div className="modal-body p-4">
+                {modalError && (
+                  <div className="alert alert-danger rounded-3 shadow-sm mb-4">
+                    {modalError}
+                  </div>
+                )}
+
+                <div className="mb-4">
+                  <label className="form-label fw-semibold text-primary">Tên màu <span className="text-danger">*</span></label>
+                  <input
+                    type="text"
+                    className="form-control rounded-3"
+                    value={currentData.name}
+                    onChange={(e) => setCurrentData({ ...currentData, name: e.target.value })}
+                    required
+                    placeholder="Vàng, Đen, Trắng..."
+                  />
                 </div>
-                <div className="modal-body">
-                  {deleteError && <div className="alert alert-danger">{deleteError}</div>}
-                  <p>Bạn có chắc chắn muốn xóa màu sắc <strong>"{deleteColor?.name || 'này'}"</strong> không?</p>
-                </div>
-                <div className="modal-footer">
-                  <button type="button" className="btn btn-secondary" onClick={handleCloseDeleteModal} disabled={isDeleting}>Hủy</button>
-                  <button type="button" className="btn btn-danger" onClick={handleConfirmDelete} disabled={isDeleting}>
-                    {isDeleting ? (
-                      <>
-                        <span className="spinner-border spinner-border-sm me-2" role="status"></span>
-                        Đang xóa...
-                      </>
-                    ) : (
-                      'Xác nhận xóa'
-                    )}
-                  </button>
+
+                <div className="mb-4">
+                  <label className="form-label fw-semibold">Mã HEX</label>
+                  <input
+                    type="text"
+                    className="form-control rounded-3"
+                    value={currentData.hex_code || ''}
+                    onChange={(e) => setCurrentData({ ...currentData, hex_code: e.target.value || null })}
+                    placeholder="#FF0000"
+                  />
+                  {currentData.hex_code && (
+                    <div
+                      className="mt-3 p-4 rounded-3 shadow-sm text-white fw-bold text-center"
+                      style={{
+                        backgroundColor: currentData.hex_code,
+                        minHeight: '80px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '1.1rem',
+                      }}
+                    >
+                      {currentData.hex_code.toUpperCase()}
+                    </div>
+                  )}
                 </div>
               </div>
-            </div>
+
+              <div className="modal-footer bg-light rounded-bottom">
+                <button
+                  type="button"
+                  className="btn btn-secondary rounded-pill px-4"
+                  onClick={() => setShowModal(false)}
+                  disabled={isSaving}
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary rounded-pill px-4"
+                  disabled={isSaving}
+                >
+                  {isSaving ? (
+                    <>
+                      <FontAwesomeIcon icon={faSync} spin className="me-2" />
+                      Đang lưu...
+                    </>
+                  ) : (
+                    'Lưu'
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
-        )}
-      </>,
+        </div>
+      </div>,
       modalRoot
     );
   };
 
-  // === JSX RETURN (TRANG CHÍNH) ===
-  return (
-    <>
-      <div className="col-12 main-content-right d-flex flex-column gap-3 gap-lg-4">
-        
-        {/* Stats Row */}
-        <div className="row g-3 g-lg-4">
-          <div className="col-6 col-md-3">
-            <StatCard 
-              title="Tổng màu sắc" 
-              value={loading ? '...' : colors.length.toString()} 
-              colorType="primary" 
-              icon="fas fa-palette" 
-            />
-          </div>
-          <div className="col-6 col-md-3">
-            <StatCard 
-              title="Màu hệ thống" 
-              value="N/A" 
-              colorType="info" 
-              icon="fas fa-cog" 
-            />
-          </div>
-          <div className="col-6 col-md-3">
-            <StatCard 
-              title="Màu tùy chỉnh" 
-              value="N/A" 
-              colorType="warning" 
-              icon="fas fa-paint-brush" 
-            />
-          </div>
-          <div className="col-6 col-md-3">
-            <StatCard 
-              title="Đang sử dụng" 
-              value="N/A" 
-              colorType="success" 
-              icon="fas fa-check" 
-            />
-          </div>
-        </div>
-        
-        {/* Bảng Màu sắc */}
-        <div className="table-card">
-          <div className="card-header d-flex flex-wrap justify-content-between align-items-center p-3">
-            <h5 className="mb-0">Danh sách Màu sắc</h5>
-            <div className="d-flex gap-2 mt-2 mt-md-0">
-              <button className="btn btn-sm btn-primary" onClick={handleAddNewClick} disabled={loading}>
-                <FontAwesomeIcon icon={faPlus} className="me-1" /> Thêm màu
+  const renderDeleteModal = () => {
+    if (!modalRoot || !showDeleteModal) return null;
+
+    return createPortal(
+      <div className="modal fade show d-block" style={{ zIndex: 1060, backgroundColor: 'rgba(0,0,0,0.5)' }}>
+        <div className="modal-dialog modal-dialog-centered">
+          <div className="modal-content shadow-lg rounded-3">
+            <div className="modal-header bg-danger text-white">
+              <h5 className="modal-title fw-bold">
+                <FontAwesomeIcon icon={faTrash} className="me-2" />
+                Xác nhận xóa
+              </h5>
+              <button
+                type="button"
+                className="btn-close btn-close-white"
+                onClick={() => setShowDeleteModal(false)}
+                disabled={isDeleting}
+              />
+            </div>
+            <div className="modal-body p-4">
+              <p className="mb-0 fw-medium">
+                Bạn có chắc chắn muốn <span className="text-danger">xóa màu này</span>?
+              </p>
+            </div>
+            <div className="modal-footer bg-light rounded-bottom">
+              <button
+                type="button"
+                className="btn btn-secondary rounded-pill px-4"
+                onClick={() => setShowDeleteModal(false)}
+                disabled={isDeleting}
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                className="btn btn-danger rounded-pill px-4"
+                onClick={confirmDelete}
+                disabled={isDeleting}
+              >
+                {isDeleting ? (
+                  <>
+                    <FontAwesomeIcon icon={faSync} spin className="me-2" />
+                    Đang xóa...
+                  </>
+                ) : (
+                  'Xóa'
+                )}
               </button>
             </div>
           </div>
-          <div className="card-body p-0">
-            <div className="table-responsive services-table">
-              <table className="table table-hover align-middle mb-0">
-                <thead className="table-light">
-                  <tr>
-                    <th style={{ paddingLeft: '1.5rem' }}>Tên màu</th>
-                    <th>Mã HEX</th>
-                    <th>Ngày tạo</th>
-                    <th>Thao tác</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {renderColorTable()}
-                </tbody>
-              </table>
+        </div>
+      </div>,
+      modalRoot
+    );
+  };
+
+  return (
+    <div className="container-fluid px-4 py-4">
+      {/* Header */}
+      <div className="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-4 gap-3">
+        <div>
+          <h1 className="h3 mb-1 text-dark fw-bold d-flex align-items-center">
+            <FontAwesomeIcon icon={faPalette} className="me-2 text-primary" />
+            Quản lý Màu sắc
+          </h1>
+          <p className="text-muted mb-0 small">Thêm, sửa, xóa và xuất danh sách màu</p>
+        </div>
+        <div className="d-flex gap-2 flex-wrap">
+          <button
+            className="btn btn-success rounded-pill shadow-sm px-4 d-flex align-items-center"
+            onClick={handleAddNew}
+          >
+            <FontAwesomeIcon icon={faPlus} className="me-2" />
+            Thêm màu
+          </button>
+          <button
+            className="btn btn-outline-success rounded-pill px-4 d-flex align-items-center"
+            onClick={handleExportExcel}
+            disabled={colors.length === 0}
+          >
+            <FontAwesomeIcon icon={faDownload} className="me-2" />
+            Xuất Excel
+          </button>
+          {selectedColors.length > 0 && (
+            <button
+              className="btn btn-danger rounded-pill px-4 d-flex align-items-center"
+              onClick={handleBulkDelete}
+            >
+              <FontAwesomeIcon icon={faTrash} className="me-2" />
+              Xóa ({selectedColors.length})
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Search */}
+      <div className="card border-0 shadow-sm rounded-3 mb-4">
+        <div className="card-body p-4">
+          <div className="row g-3 align-items-center">
+            <div className="col-lg-6">
+              <div className="input-group">
+                <span className="input-group-text bg-white border-end-0 rounded-start-pill">
+                  <FontAwesomeIcon icon={faSearch} className="text-muted" />
+                </span>
+                <input
+                  type="text"
+                  className="form-control border-start-0 rounded-end-pill"
+                  placeholder="Tìm tên màu, mã HEX..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="col-lg-3">
+              <button
+                className="btn btn-outline-primary rounded-pill w-100 d-flex align-items-center justify-content-center"
+                onClick={() => loadColors(currentPage, searchTerm)}
+                disabled={loading}
+              >
+                <FontAwesomeIcon icon={loading ? faSync : faSync} spin={loading} className="me-2" />
+                {loading ? '...' : 'Tải lại'}
+              </button>
+            </div>
+            <div className="col-lg-3 text-lg-end">
+              <small className="text-muted">
+                Tổng: <strong className="text-primary fw-bold">{pagination.total}</strong>
+              </small>
             </div>
           </div>
         </div>
       </div>
-      
-      {/* Gọi hàm renderModals để "dịch chuyển" chúng ra #modal-root */}
-      {renderModals()}
-    </>
+
+      {/* Table */}
+      <div className="card border-0 shadow-sm rounded-3 overflow-hidden">
+        <div
+          className="card-header text-white d-flex justify-content-between align-items-center"
+          style={{ background: 'linear-gradient(90deg, #667eea, #764ba2)' }}
+        >
+          <h5 className="mb-0 fw-bold">Danh sách màu</h5>
+          <small className="opacity-90">
+            Hiển thị <strong>{colors.length}</strong> / <strong>{pagination.total}</strong>
+          </small>
+        </div>
+        <div className="card-body p-0">
+          <div className="table-responsive">
+            <table className="table table-hover align-middle mb-0">
+              <thead className="bg-light">
+                <tr>
+                  <th className="ps-4">
+                    <div className="form-check">
+                      <input
+                        type="checkbox"
+                        className="form-check-input"
+                        checked={selectAll}
+                        onChange={handleSelectAll}
+                      />
+                      <label className="form-check-label ms-2 fw-semibold">Tên màu</label>
+                    </div>
+                  </th>
+                  <th className="fw-semibold">Mã HEX</th>
+                  <th className="fw-semibold">Người tạo</th>
+                  <th className="fw-semibold">Ngày tạo</th>
+                  <th className="text-center fw-semibold">Hành động</th>
+                </tr>
+              </thead>
+              <tbody>
+                {renderTable()}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        {pagination.total > 0 && (
+          <div className="card-footer bg-light d-flex justify-content-between align-items-center flex-wrap gap-3 p-3">
+            <small className="text-muted">
+              Trang <strong>{currentPage}</strong> / <strong>{pagination.pages}</strong>
+            </small>
+            {renderPagination()}
+          </div>
+        )}
+      </div>
+
+      {renderModal()}
+      {renderDeleteModal()}
+    </div>
   );
 };
 

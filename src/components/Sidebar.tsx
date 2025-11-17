@@ -14,6 +14,7 @@ const Sidebar: React.FC = () => {
     ],
     management: [
       { to: '/devices', icon: 'fas fa-mobile-alt', text: 'Thiết bị' },
+      { to: '/device-infos', icon: 'fas fa-mobile-alt', text: 'Thông tin thiết bị' },
       { to: '/colors', icon: 'fas fa-palette', text: 'Màu sắc' },
       { to: '/storage', icon: 'fas fa-hdd', text: 'Dung lượng' },
       { to: '/components', icon: 'fas fa-microchip', text: 'Linh kiện' },

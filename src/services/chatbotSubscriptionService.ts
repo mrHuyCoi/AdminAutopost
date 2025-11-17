@@ -1,27 +1,64 @@
 // src/services/chatbotSubscriptionService.ts
 import http from '../lib/axios';
-import { UserChatbotSubscription, ChatbotPlan } from '../types/chatbotTypes'; // Nên tạo file types
+
+export interface ChatbotPlan {
+  id: string;
+  name: string;
+  price: number;
+  duration_days: number;
+}
+
+export interface UserChatbotSubscription {
+  id: string;
+  user_id: string;
+  plan_id: string;
+  status: 'pending' | 'approved' | 'rejected';
+  start_date: string;
+  end_date: string;
+  total_price: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  user?: { id: string; email: string; full_name: string };
+  plan?: ChatbotPlan;
+  admin_notes?: string;
+}
+
+// Cải thiện unwrapData để xử lý mọi format
+const unwrapData = (response: any): any => {
+  const data = response?.data;
+
+  if (data?.data) return data.data;
+  if (Array.isArray(data?.items)) return data.items;
+  if (Array.isArray(data)) return data;
+  if (data) return data;
+
+  return response;
+};
 
 export const chatbotSubscriptionService = {
-  // (Dùng cho ChatbotPermissionsPage)
-  getAllSubscriptions: (): Promise<UserChatbotSubscription[]> => {
-    return http.get<UserChatbotSubscription[]>('/admin/chatbot-subscriptions');
+  getAllSubscriptions: async (): Promise<UserChatbotSubscription[]> => {
+    const res = await http.get('/chatbot-subscriptions/admin/subscriptions');
+    return unwrapData(res);
   },
 
-  approveSubscription: (id: string, notes: string | null = null): Promise<UserChatbotSubscription> => {
-    return http.post<UserChatbotSubscription>(`/admin/chatbot-subscriptions/${id}/approve`, { notes });
+  approveSubscription: async (id: string, notes?: string | null): Promise<UserChatbotSubscription> => {
+    const payload = notes ? { notes } : {};
+    const res = await http.post(`/chatbot-subscriptions/admin/subscriptions/${id}/approve`, payload);
+    return unwrapData(res);
   },
 
-  rejectSubscription: (id: string, notes: string | null = null): Promise<UserChatbotSubscription> => {
-    return http.post<UserChatbotSubscription>(`/admin/chatbot-subscriptions/${id}/reject`, { notes });
+  rejectSubscription: async (id: string, notes: string): Promise<UserChatbotSubscription> => {
+    const res = await http.post(`/chatbot-subscriptions/admin/subscriptions/${id}/reject`, { notes });
+    return unwrapData(res);
   },
 
-  deleteSubscription: (id: string): Promise<void> => {
-    return http.delete<void>(`/admin/chatbot-subscriptions/${id}`);
+  deleteSubscription: async (id: string): Promise<void> => {
+    await http.delete(`/chatbot-subscriptions/admin/subscriptions/${id}`);
   },
 
-  // (Dùng cho trang quản lý Gói cước - SubscriptionPlanPage)
-  getAllChatbotPlans: (): Promise<ChatbotPlan[]> => {
-    return http.get<ChatbotPlan[]>('/chatbot/plans');
+  getAllChatbotPlans: async (): Promise<ChatbotPlan[]> => {
+    const res = await http.get('/chatbot-subscriptions/plans');
+    return unwrapData(res);
   }
 };

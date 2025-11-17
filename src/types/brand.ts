@@ -1,23 +1,24 @@
-
 export interface Brand {
+  service: any;
   id: string;
   name: string;
-  
-  // Các trường tùy chọn (từ cả hai file cũ)
-  product_count?: number;     // (Từ Brand.ts cũ)
-  description?: string | null;  // (Từ Brand.ts cũ)
-  warranty?: string | null;     // (Từ deviceBrand.ts cũ)
-  user_id?: string;             // (Từ deviceBrand.ts cũ)
-
-  created_at: string;
-  updated_at: string;
+  description?: string;
+  service_id?: string;
+  product_count?: number;
+  device_count?: number;
+  is_deleted?: boolean;
+  created_at?: string;
+  updated_at?: string;
 }
 
-// Kiểu 'Create' và 'Update' hợp nhất
 export interface BrandCreate {
   name: string;
-  description?: string | null;
-  warranty?: string | null;
+  description?: string;
+  service_id?: string;
 }
 
-export type BrandUpdate = Partial<BrandCreate>;
+export interface BrandUpdate {
+  name?: string;
+  description?: string;
+  service_id?: string;
+}
