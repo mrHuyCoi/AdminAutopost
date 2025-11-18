@@ -52,16 +52,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 // src/contexts/AuthContext.tsx – HÀM LOGIN MỚI (KHÔNG DÙNG apiClient)
 const login = async (email: string, password: string) => {
   try {
-    // 1. Tạo form-urlencoded body
     const formData = new URLSearchParams();
-    formData.append('username', email);     // backend yêu cầu "username"
+    formData.append('username', email);
     formData.append('password', password);
 
     console.log('Gửi login (form-urlencoded):', formData.toString());
-    // → "username=admin@example.com&password=123456"
 
-    // 2. Gửi bằng fetch
-    const response = await fetch('http://127.0.0.1:8000/api/v1/auth/login', {
+    const response = await fetch(`${import.meta.env.VITE_API_URL}/auth/login`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
@@ -69,12 +66,24 @@ const login = async (email: string, password: string) => {
       body: formData,
     });
 
-    // 3. Xử lý response
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      console.error('Login thất bại:', errorData);
-      throw new Error(errorData.detail || `HTTP ${response.status}`);
+      throw new Error(errorData.detail || `Đăng nhập thất bại (${response.status})`);
     }
+
+    const data = await response.json();
+    const { access_token, user: userData } = data;
+
+    localStorage.setItem('access_token', access_token);
+    localStorage.setItem('user', JSON.stringify(userData));
+
+    setUser(userData);
+    setIsAuthenticated(true);
+  } catch (error: any) {
+    console.error('Lỗi đăng nhập:', error);
+    throw error;
+  }
+};
 
     const data = await response.json();
     console.log('Đăng nhập thành công:', data);
