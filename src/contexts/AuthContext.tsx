@@ -24,7 +24,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Kiểm tra token khi load app
   const checkAuth = async () => {
     const token = localStorage.getItem('access_token');
     if (!token) {
@@ -48,7 +47,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     checkAuth();
   }, []);
 
-  // HÀM LOGIN ĐÃ SẠCH HOÀN TOÀN – CHẠY NGON 100%
   const login = async (email: string, password: string) => {
     try {
       const formData = new URLSearchParams();
@@ -83,7 +81,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.error('Lỗi đăng nhập:', error);
       throw error;
     }
-  };
+  }; // ← ĐÂY LÀ DẤU NGOẶC BỊ THIẾU TRƯỚC ĐÓ!!!
 
   const logout = () => {
     localStorage.removeItem('access_token');
