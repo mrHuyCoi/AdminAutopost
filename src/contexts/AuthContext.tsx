@@ -24,13 +24,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Kiểm tra token khi load app
   const checkAuth = async () => {
     const token = localStorage.getItem('access_token');
     if (!token) {
       setLoading(false);
       return;
     }
-
     try {
       const response = await apiClient.get('/users/me');
       setUser(response.data);
@@ -48,60 +48,42 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     checkAuth();
   }, []);
 
- // src/contexts/AuthContext.tsx – HÀM LOGIN ĐÃ FIX
-// src/contexts/AuthContext.tsx – HÀM LOGIN MỚI (KHÔNG DÙNG apiClient)
-const login = async (email: string, password: string) => {
-  try {
-    const formData = new URLSearchParams();
-    formData.append('username', email);
-    formData.append('password', password);
+  // HÀM LOGIN ĐÃ SẠCH HOÀN TOÀN – CHẠY NGON 100%
+  const login = async (email: string, password: string) => {
+    try {
+      const formData = new URLSearchParams();
+      formData.append('username', email);
+      formData.append('password', password);
+      console.log('Gửi login (form-urlencoded):', formData.toString());
 
-    console.log('Gửi login (form-urlencoded):', formData.toString());
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: formData,
+      });
 
-    const response = await fetch(`${import.meta.env.VITE_API_URL}/auth/login`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: formData,
-    });
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `Đăng nhập thất bại (${response.status})`);
+      }
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.detail || `Đăng nhập thất bại (${response.status})`);
+      const data = await response.json();
+      console.log('Đăng nhập thành công:', data);
+
+      const { access_token, user: userData } = data;
+
+      localStorage.setItem('access_token', access_token);
+      localStorage.setItem('user', JSON.stringify(userData));
+
+      setUser(userData);
+      setIsAuthenticated(true);
+    } catch (error: any) {
+      console.error('Lỗi đăng nhập:', error);
+      throw error;
     }
-
-    const data = await response.json();
-    const { access_token, user: userData } = data;
-
-    localStorage.setItem('access_token', access_token);
-    localStorage.setItem('user', JSON.stringify(userData));
-
-    setUser(userData);
-    setIsAuthenticated(true);
-  } catch (error: any) {
-    console.error('Lỗi đăng nhập:', error);
-    throw error;
-  }
-};
-
-    const data = await response.json();
-    console.log('Đăng nhập thành công:', data);
-
-    const { access_token, user: userData } = data;
-
-    // 4. Lưu vào localStorage
-    localStorage.setItem('access_token', access_token);
-    localStorage.setItem('user', JSON.stringify(userData));
-
-    // 5. Cập nhật state
-    setUser(userData);
-    setIsAuthenticated(true);
-  } catch (error: any) {
-    console.error('Lỗi kết nối:', error);
-    throw new Error(error.message || 'Không thể kết nối đến server');
-  }
-};
+  };
 
   const logout = () => {
     localStorage.removeItem('access_token');
