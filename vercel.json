@@ -7,7 +7,7 @@
   ],
   "build": {
     "env": {
-      "REACT_APP_API_URL": "https://beautopost.onrender.com"
+      "REACT_APP_API_URL": "https://28803b2f8702.ngrok-free.app"
     }
   }
 }
