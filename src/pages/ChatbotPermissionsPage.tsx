@@ -47,20 +47,45 @@ const ChatbotPermissionPage: React.FC = () => {
   const [actionNotes, setActionNotes] = useState<string>('');
   const [selectedUser, setSelectedUser] = useState<UserChatbotSubscription['user'] | null>(null);
 
+  // const loadSubscriptions = async () => {
+  //   try {
+  //     setLoading(true);
+  //     setError(null);
+  //     const data = await chatbotSubscriptionService.getAllSubscriptions();
+  //     setSubscriptions(data);
+  //   } catch (err: any) {
+  //     const errorMessage = getErrorMessage(err);
+  //     setError(errorMessage);
+  //     toast.error(errorMessage);
+  //   } finally {
+  //     setLoading(false);
+  //   }
+  // };
+
   const loadSubscriptions = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const data = await chatbotSubscriptionService.getAllSubscriptions();
-      setSubscriptions(data);
-    } catch (err: any) {
-      const errorMessage = getErrorMessage(err);
-      setError(errorMessage);
-      toast.error(errorMessage);
-    } finally {
-      setLoading(false);
-    }
-  };
+  try {
+    setLoading(true);
+    setError(null);
+
+    const res = await chatbotSubscriptionService.getAllSubscriptions();
+
+    const list =
+      Array.isArray(res)
+        ? res
+        : Array.isArray(res?.data)
+          ? res.data
+          : [];
+
+    setSubscriptions(list);
+  } catch (err: any) {
+    const errorMessage = getErrorMessage(err);
+    setError(errorMessage);
+    toast.error(errorMessage);
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   useEffect(() => {
     loadSubscriptions();
