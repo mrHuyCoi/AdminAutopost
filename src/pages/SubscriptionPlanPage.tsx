@@ -53,8 +53,19 @@ const SubscriptionPlanPage: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
+      // const plansResponse = await subscriptionPlanService.getAllPlans();
+      // setPlans(plansResponse);
       const plansResponse = await subscriptionPlanService.getAllPlans();
-      setPlans(plansResponse);
+
+const data =
+  Array.isArray(plansResponse)
+    ? plansResponse
+    : Array.isArray(plansResponse?.data)
+      ? plansResponse.data
+      : [];
+
+setPlans(data);
+
     } catch (err: any) {
       console.error('Error loading plans:', err);
       setError(err.response?.data?.detail || err.message || 'Lỗi tải dữ liệu');
