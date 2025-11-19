@@ -26,7 +26,7 @@ export const serviceService = {
       console.log('🚀 [serviceService] Đang gọi API Get All Services với params:', params);
 
       const response = await http.get(API_SERVICES, { params: params });
-      
+      console.log("🚀 SERVICE API RESPONSE:", response.data);
       // Trả về toàn bộ response.data (chứa data và metadata)
       return response.data;
 
@@ -34,9 +34,9 @@ export const serviceService = {
       console.error('❌ [serviceService] Lỗi khi gọi getAllServices:', error);
       throw error;
     }
+    
   },
 
-  console.log("🚀 SERVICE API RESPONSE:", response.data);
   // Lấy service theo ID
   getServiceById: async (id: string): Promise<Service> => {
     const response = await http.get(`${API_SERVICES}/${id}`);
