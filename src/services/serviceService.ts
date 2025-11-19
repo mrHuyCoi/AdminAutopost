@@ -36,6 +36,7 @@ export const serviceService = {
     }
   },
 
+  console.log("🚀 SERVICE API RESPONSE:", response.data);
   // Lấy service theo ID
   getServiceById: async (id: string): Promise<Service> => {
     const response = await http.get(`${API_SERVICES}/${id}`);
