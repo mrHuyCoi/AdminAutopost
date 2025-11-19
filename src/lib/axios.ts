@@ -15,6 +15,7 @@ apiClient.interceptors.request.use((config) => {
   }
 
   // CHỈ DÙNG form-urlencoded CHO CÁC ENDPOINT CỤ THỂ
+  config.headers['ngrok-skip-browser-warning'] = 'true';
   const formUrlEncodedEndpoints = ['/auth/login'];
   const isFormUrlEncoded = formUrlEncodedEndpoints.some(endpoint =>
     config.url?.includes(endpoint)
