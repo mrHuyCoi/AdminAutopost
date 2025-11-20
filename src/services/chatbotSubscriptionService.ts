@@ -42,14 +42,33 @@ export const chatbotSubscriptionService = {
     return unwrapData(res);
   },
 
-  approveSubscription: async (id: string, notes?: string | null): Promise<UserChatbotSubscription> => {
-    const payload = notes ? { notes } : {};
+  // SỬA LỖI 422: Thêm adminId và gửi approved_by_id
+  approveSubscription: async (
+    id: string, 
+    adminId: string, // <-- THÊM ĐỐI SỐ adminId
+    notes?: string | null
+  ): Promise<UserChatbotSubscription> => {
+    // Gửi Admin ID và Ghi chú đi trong Request Body
+    const payload = { 
+        approved_by_id: adminId, 
+        ...(notes && { admin_notes: notes }) // Giả định Backend dùng trường 'admin_notes'
+    };
     const res = await http.post(`/chatbot-subscriptions/admin/subscriptions/${id}/approve`, payload);
     return unwrapData(res);
   },
 
-  rejectSubscription: async (id: string, notes: string): Promise<UserChatbotSubscription> => {
-    const res = await http.post(`/chatbot-subscriptions/admin/subscriptions/${id}/reject`, { notes });
+  // SỬA LỖI 422: Thêm adminId và gửi rejected_by_id
+  rejectSubscription: async (
+    id: string, 
+    adminId: string, // <-- THÊM ĐỐI SỐ adminId
+    notes: string
+  ): Promise<UserChatbotSubscription> => {
+    // Gửi Admin ID và Ghi chú từ chối
+    const payload = {
+        rejected_by_id: adminId, 
+        admin_notes: notes // Ghi chú từ chối là bắt buộc trong Frontend
+    };
+    const res = await http.post(`/chatbot-subscriptions/admin/subscriptions/${id}/reject`, payload);
     return unwrapData(res);
   },
 
