@@ -2,10 +2,11 @@
 import axios from 'axios';
 import qs from 'qs';
 
-const apiClient = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api/v1',
-  timeout: 10000,
+export const api = axios.create({
+  baseURL: "https://b5396953a94f.ngrok-free.app/api/v1",
+  withCredentials: true,
 });
+
 
 // INTERCEPTOR: TỰ ĐỘNG THÊM TOKEN + XỬ LÝ FORM-URLENCODED
 apiClient.interceptors.request.use((config) => {
