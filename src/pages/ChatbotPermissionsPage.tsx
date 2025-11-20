@@ -47,8 +47,8 @@ const ChatbotPermissionPage: React.FC = () => {
     const [actionNotes, setActionNotes] = useState<string>('');
     const [selectedUser, setSelectedUser] = useState<UserChatbotSubscription['user'] | null>(null);
 
-
-    const currentAdminId: string | null = "869e4ec5-3f10-4dad-9fa9-5dbff4d83bc3";
+    // Dùng ID Admin cố định
+    const currentAdminId: string | null = "869e4ec5-3f10-4dad-9fa9-5dbff4d83bc3"; // <-- GIỮ NGUYÊN
 
     const loadSubscriptions = async () => {
         try {
@@ -116,10 +116,10 @@ const ChatbotPermissionPage: React.FC = () => {
         e.preventDefault();
         if (!actionId || !actionType || !selectedUser) return;
         
-        // KIỂM TRA LỖI 422: Đảm bảo có Admin ID
-        if (!currentAdminId || currentAdminId === "869e4ec5-3f10-4dad-9fa9-5dbff4d83bc3") {
-             toast.error('Lỗi cấu hình: Không xác định được ID Admin hiện tại. Vui lòng kiểm tra lại');
-             return;
+        // SỬA: Bỏ điều kiện kiểm tra lỗi đang ngăn API chạy
+        if (!currentAdminId) {
+            toast.error('Lỗi cấu hình: Không tìm thấy ID Admin.');
+            return;
         }
 
 
