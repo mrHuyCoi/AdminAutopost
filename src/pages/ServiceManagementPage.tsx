@@ -238,9 +238,16 @@ const ServiceManagementPage: React.FC = () => {
         combinedSearch
       );
 
-      const servicesData: Service[] = response.data || [];
-      const total = response.total ?? 0;
-      const totalPages = response.totalPages ?? 1;
+      const servicesData: Service[] =
+    response.data || response.items || response.services || [];
+
+    const total = response.total ?? servicesData.length ?? 0;
+
+    const totalPages =
+  response.pages ||
+  response.totalPages ||
+  Math.ceil(total / ITEMS_PER_PAGE);
+
 
 
       setServices(servicesData);
