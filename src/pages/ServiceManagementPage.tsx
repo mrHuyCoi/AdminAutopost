@@ -239,9 +239,9 @@ const ServiceManagementPage: React.FC = () => {
       );
 
       const servicesData: Service[] = response.data || [];
-      const metadata = response.metadata || {};
-      const total = metadata.total || 0;
-      const totalPages = metadata.total_pages || 1;
+      const total = response.total ?? 0;
+      const totalPages = response.totalPages ?? 1;
+
 
       setServices(servicesData);
       setPagination({
@@ -978,8 +978,6 @@ const ServiceManagementPage: React.FC = () => {
         </div>
       </div>
 
-      console.log("metadata:", metadata);
-      console.log("pagination:", pagination);
 
 
       {renderModals()}
