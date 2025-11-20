@@ -117,7 +117,7 @@ const ChatbotPermissionPage: React.FC = () => {
         if (!actionId || !actionType || !selectedUser) return;
         
         // KIỂM TRA LỖI 422: Đảm bảo có Admin ID
-        if (!currentAdminId || currentAdminId === "FIX_ME_GET_CURRENT_ADMIN_ID") {
+        if (!currentAdminId || currentAdminId === "869e4ec5-3f10-4dad-9fa9-5dbff4d83bc3") {
              toast.error('Lỗi cấu hình: Không xác định được ID Admin hiện tại. Vui lòng kiểm tra lại');
              return;
         }
