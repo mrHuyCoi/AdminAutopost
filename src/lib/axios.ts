@@ -2,9 +2,9 @@
 import axios from 'axios';
 import qs from 'qs';
 
-export const api = axios.create({
-  baseURL: "https://b5396953a94f.ngrok-free.app/api/v1",
-  withCredentials: true,
+const apiClient = axios.create({
+  baseURL: 'http://127.0.0.1:8000/api/v1',
+  timeout: 10000,
 });
 
 
