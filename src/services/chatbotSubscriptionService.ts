@@ -24,15 +24,12 @@ export interface UserChatbotSubscription {
   admin_notes?: string;
 }
 
-// Cải thiện unwrapData để xử lý mọi format
 const unwrapData = (response: any): any => {
   const data = response?.data;
-
   if (data?.data) return data.data;
   if (Array.isArray(data?.items)) return data.items;
   if (Array.isArray(data)) return data;
   if (data) return data;
-
   return response;
 };
 
@@ -42,20 +39,27 @@ export const chatbotSubscriptionService = {
     return unwrapData(res);
   },
 
+  // --- FIX LỖI 422 QUAN TRỌNG ---
+  // Chuyển admin_id sang Query Params (trên URL) thay vì Body
   approveSubscription: async (
     id: string, 
     adminId: string, 
     notes?: string | null
   ): Promise<UserChatbotSubscription> => {
-    const payload = { 
+    // Body chỉ chứa notes (nếu cần)
+    const bodyData = { 
         notes: notes,
-        status: 'approved' // Thêm trường này cho chắc chắn
+        // Thêm status phòng khi backend cần trong body
+        status: 'approved' 
     };
     
+    // QUAN TRỌNG: params sẽ tạo ra url dạng .../approve?admin_id=...
     const res = await http.post(
         `/chatbot-subscriptions/admin/subscriptions/${id}/approve`, 
-        payload, 
-        { params: { admin_id: adminId } } 
+        bodyData, 
+        { 
+            params: { admin_id: adminId } // <-- Gửi admin_id ở đây
+        }
     );
     return unwrapData(res);
   },
@@ -65,15 +69,17 @@ export const chatbotSubscriptionService = {
     adminId: string, 
     notes: string
   ): Promise<UserChatbotSubscription> => {
-    const payload = {
+    const bodyData = {
         notes: notes,
         status: 'rejected'
     };
     
     const res = await http.post(
         `/chatbot-subscriptions/admin/subscriptions/${id}/reject`, 
-        payload,
-        { params: { admin_id: adminId } }
+        bodyData,
+        { 
+            params: { admin_id: adminId } // <-- Gửi admin_id ở đây
+        }
     );
     return unwrapData(res);
   },
