@@ -42,31 +42,29 @@ export const chatbotSubscriptionService = {
     return unwrapData(res);
   },
 
-  // SỬA LỖI 422: Thêm adminId và gửi approved_by_id
+  // SỬA LỖI 422: Sử dụng tên trường admin_id và notes (phổ biến hơn trong Backend)
   approveSubscription: async (
     id: string, 
     adminId: string, // <-- THÊM ĐỐI SỐ adminId
     notes?: string | null
   ): Promise<UserChatbotSubscription> => {
-    // Gửi Admin ID và Ghi chú đi trong Request Body
     const payload = { 
-        approved_by_id: adminId, 
-        ...(notes && { admin_notes: notes }) // Giả định Backend dùng trường 'admin_notes'
+        admin_id: adminId, // <-- ĐÃ ĐỔI TÊN TRƯỜNG: Dùng admin_id thay vì approved_by_id
+        ...(notes && { notes: notes }) // <-- ĐÃ ĐỔI TÊN TRƯỜNG: Dùng notes thay vì admin_notes
     };
     const res = await http.post(`/chatbot-subscriptions/admin/subscriptions/${id}/approve`, payload);
     return unwrapData(res);
   },
 
-  // SỬA LỖI 422: Thêm adminId và gửi rejected_by_id
+  // SỬA LỖI 422: Sử dụng tên trường admin_id và notes
   rejectSubscription: async (
     id: string, 
     adminId: string, // <-- THÊM ĐỐI SỐ adminId
     notes: string
   ): Promise<UserChatbotSubscription> => {
-    // Gửi Admin ID và Ghi chú từ chối
     const payload = {
-        rejected_by_id: adminId, 
-        admin_notes: notes // Ghi chú từ chối là bắt buộc trong Frontend
+        admin_id: adminId, // <-- ĐÃ ĐỔI TÊN TRƯỜNG: Dùng admin_id thay vì rejected_by_id
+        notes: notes // Ghi chú từ chối
     };
     const res = await http.post(`/chatbot-subscriptions/admin/subscriptions/${id}/reject`, payload);
     return unwrapData(res);
