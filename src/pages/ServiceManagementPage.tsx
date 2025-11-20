@@ -978,6 +978,10 @@ const ServiceManagementPage: React.FC = () => {
         </div>
       </div>
 
+      console.log("metadata:", metadata);
+      console.log("pagination:", pagination);
+
+
       {renderModals()}
       {showViewModal && renderViewModal()}
 
