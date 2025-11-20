@@ -47,9 +47,8 @@ const ChatbotPermissionPage: React.FC = () => {
     const [actionNotes, setActionNotes] = useState<string>('');
     const [selectedUser, setSelectedUser] = useState<UserChatbotSubscription['user'] | null>(null);
 
-    // FIX CHỖ NÀY: Dùng hook hoặc context để lấy ID của Admin hiện tại
-    // Vui lòng thay thế chuỗi "FIX_ME_GET_CURRENT_ADMIN_ID" bằng ID thực tế của Admin đang đăng nhập.
-    const currentAdminId: string | null = "FIX_ME_GET_CURRENT_ADMIN_ID";
+
+    const currentAdminId: string | null = "869e4ec5-3f10-4dad-9fa9-5dbff4d83bc3";
 
     const loadSubscriptions = async () => {
         try {
