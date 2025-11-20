@@ -48,7 +48,7 @@ const ChatbotPermissionPage: React.FC = () => {
     const [selectedUser, setSelectedUser] = useState<UserChatbotSubscription['user'] | null>(null);
 
 
-    const currentAdminId: string | null = "922d522e-8c34-4bbd-98ef-5e1e68ae98f4";
+    const currentAdminId: string | null = "869e4ec5-3f10-4dad-9fa9-5dbff4d83bc3";
 
     const loadSubscriptions = async () => {
         try {
