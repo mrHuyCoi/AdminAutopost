@@ -64,7 +64,7 @@ const ColorManagementPage: React.FC = () => {
       setPagination({
         total: response.total || 0,
         page: response.page || validPage,
-        pages: response.totalPages || 1
+        pages: response.totalPages || 1 // Đảm bảo ít nhất là 1 trang
       });
       setCurrentPage(validPage);
     } catch (err: any) {
@@ -81,7 +81,9 @@ const ColorManagementPage: React.FC = () => {
   }, [currentPage, searchTerm]);
 
   const handlePageChange = (page: number) => {
-    if (isNaN(page) || page < 1 || page > pagination.pages) return;
+    // Cho phép chuyển trang nếu page hợp lệ (>=1 và <= tổng số trang thực tế hoặc 1 nếu chưa có data)
+    const maxPage = Math.max(1, pagination.pages);
+    if (isNaN(page) || page < 1 || page > maxPage) return;
     setCurrentPage(page);
   };
 
@@ -294,15 +296,31 @@ const ColorManagementPage: React.FC = () => {
   };
 
   const renderPagination = () => {
-    if (pagination.pages <= 1) return null;
+    // BỎ ĐIỀU KIỆN ẨN NẾU CHỈ CÓ 1 TRANG
+    // if (pagination.pages <= 1) return null; 
 
+    // Đảm bảo luôn có ít nhất 1 trang để hiển thị số 1
+    const totalPages = Math.max(1, pagination.pages);
+    
     const delta = 1;
     const pages = [];
-    for (let i = Math.max(1, currentPage - delta); i <= Math.min(pagination.pages, currentPage + delta); i++) {
+    for (let i = Math.max(1, currentPage - delta); i <= Math.min(totalPages, currentPage + delta); i++) {
       pages.push(i);
     }
-    if (pages[0] > 1) pages.unshift(1);
-    if (pages[pages.length - 1] < pagination.pages) pages.push(pagination.pages);
+    
+    if (pages[0] > 1) {
+        if (pages[0] > 2) {
+            pages.unshift('...');
+        }
+        pages.unshift(1);
+    }
+    
+    if (pages[pages.length - 1] < totalPages) {
+        if (pages[pages.length - 1] < totalPages - 1) {
+            pages.push('...');
+        }
+        pages.push(totalPages);
+    }
 
     return (
       <div className="d-flex justify-content-center align-items-center gap-1 mt-3">
@@ -312,23 +330,26 @@ const ColorManagementPage: React.FC = () => {
         <button className="btn btn-sm btn-outline-secondary rounded-pill px-3" onClick={() => handlePageChange(currentPage - 1)} disabled={currentPage === 1}>
           <FontAwesomeIcon icon={faChevronLeft} />
         </button>
+        
         {pages.map((p, i) => (
-          <React.Fragment key={p}>
-            {pages[i - 1] && pages[i - 1] + 1 < p && (
+          <React.Fragment key={i}>
+            {p === '...' ? (
               <span className="px-2 text-muted">...</span>
+            ) : (
+              <button
+                className={`btn btn-sm rounded-pill ${p === currentPage ? 'btn-primary text-white' : 'btn-outline-secondary'} px-3`}
+                onClick={() => handlePageChange(p as number)}
+              >
+                {p}
+              </button>
             )}
-            <button
-              className={`btn btn-sm rounded-pill ${p === currentPage ? 'btn-primary text-white' : 'btn-outline-secondary'} px-3`}
-              onClick={() => handlePageChange(p)}
-            >
-              {p}
-            </button>
           </React.Fragment>
         ))}
-        <button className="btn btn-sm btn-outline-secondary rounded-pill px-3" onClick={() => handlePageChange(currentPage + 1)} disabled={currentPage === pagination.pages}>
+
+        <button className="btn btn-sm btn-outline-secondary rounded-pill px-3" onClick={() => handlePageChange(currentPage + 1)} disabled={currentPage === totalPages}>
           <FontAwesomeIcon icon={faChevronRight} />
         </button>
-        <button className="btn btn-sm btn-outline-secondary rounded-pill px-3" onClick={() => handlePageChange(pagination.pages)} disabled={currentPage === pagination.pages}>
+        <button className="btn btn-sm btn-outline-secondary rounded-pill px-3" onClick={() => handlePageChange(totalPages)} disabled={currentPage === totalPages}>
           <FontAwesomeIcon icon={faAnglesRight} />
         </button>
       </div>
@@ -608,14 +629,13 @@ const ColorManagementPage: React.FC = () => {
             </table>
           </div>
         </div>
-        {pagination.total > 0 && (
-          <div className="card-footer bg-light d-flex justify-content-between align-items-center flex-wrap gap-3 p-3">
+        {/* LUÔN HIỂN THỊ PHẦN NÀY - Đã xóa điều kiện check pagination.total > 0 */}
+        <div className="card-footer bg-light d-flex justify-content-between align-items-center flex-wrap gap-3 p-3">
             <small className="text-muted">
-              Trang <strong>{currentPage}</strong> / <strong>{pagination.pages}</strong>
+              Trang <strong>{currentPage}</strong> / <strong>{Math.max(1, pagination.pages)}</strong>
             </small>
             {renderPagination()}
-          </div>
-        )}
+        </div>
       </div>
 
       {renderModal()}

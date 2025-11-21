@@ -1,3 +1,4 @@
+// src/components/Sidebar.tsx
 import React from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 
@@ -22,9 +23,8 @@ const Sidebar: React.FC = () => {
       { to: '/services', icon: 'fas fa-concierge-bell', text: 'Dịch Vụ' }
     ],
     system: [
-      { to: '/settings', icon: 'fas fa-cog', text: 'Cài đặt' },
-      { to: '/statistics', icon: 'fas fa-chart-bar', text: 'Thống kê' },
-      { to: '/support', icon: 'fas fa-life-ring', text: 'Hỗ trợ' }
+      { to: '/settings', icon: 'fas fa-cog', text: 'Cài đặt' }
+      // Đã xóa Thống kê và Hỗ trợ ở đây
     ]
   };
 

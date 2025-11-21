@@ -1,5 +1,5 @@
 // src/pages/DeviceInfoManagementPage.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import api from '../lib/axios';
 import toast from 'react-hot-toast';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
@@ -7,89 +7,21 @@ import {
   faTrash, faSearch, faSync, faPlus, faMobileAlt,
   faEye, faMicrochip, faCamera, faBatteryHalf,
   faPalette, faWeightHanging, faShieldAlt, faCertificate,
-  faCalendar, faChevronLeft, faChevronRight, faFileExcel
+  faChevronLeft, faChevronRight, faFileExcel, faSpinner, faDownload, faFileImport
 } from '@fortawesome/free-solid-svg-icons';
 import { faAndroid, faApple } from '@fortawesome/free-brands-svg-icons';
 
 import { deviceBrandService, DeviceBrand } from '../services/deviceBrandService';
 
-// Excel
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
 
 // === INTERFACE ===
-interface DeviceStorage {
-  id: string;
-  capacity: number;
-  device_info_id: string;
-  user_id: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-interface DeviceColor {
-  id: string;
-  name: string;
-  color_code: string;
-  device_info_id: string;
-  user_id: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-interface DeviceMaterial {
-  id: string;
-  name: string;
-  device_info_id: string;
-  user_id: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-interface DeviceInfo {
-  id: string;
-  model: string;
-  brand: string;
-  release_date: string | null;
-  screen: string | null;
-  chip_ram: string | null;
-  camera: string | null;
-  battery: string | null;
-  connectivity_os: string | null;
-  color_english: string | null;
-  dimensions_weight: string | null;
-  sensors_health_features: string | null;
-  warranty: string | null;
-  user_id: string | null;
-  materials: DeviceMaterial[];
-  device_storages: DeviceStorage[];
-  device_colors: DeviceColor[];
-  created_at: string;
-  updated_at: string;
-}
-
-interface ApiResponse {
-  data: DeviceInfo[];
-  total: number;
-  totalPages: number;
-  message: string;
-  status_code: number;
-}
-
-interface DeviceInfoCreateData {
-  model?: string;
-  brand?: string;
-  release_date?: string;
-  screen?: string;
-  chip_ram?: string;
-  camera?: string;
-  battery?: string;
-  connectivity_os?: string;
-  color_english?: string;
-  dimensions_weight?: string;
-  sensors_health_features?: string;
-  warranty?: string;
-}
+interface DeviceStorage { id: string; capacity: number; device_info_id: string; user_id: string | null; created_at: string; updated_at: string; }
+interface DeviceColor { id: string; name: string; color_code: string; device_info_id: string; user_id: string | null; created_at: string; updated_at: string; }
+interface DeviceMaterial { id: string; name: string; device_info_id: string; user_id: string | null; created_at: string; updated_at: string; }
+interface DeviceInfo { id: string; model: string; brand: string; release_date: string | null; screen: string | null; chip_ram: string | null; camera: string | null; battery: string | null; connectivity_os: string | null; color_english: string | null; dimensions_weight: string | null; sensors_health_features: string | null; warranty: string | null; user_id: string | null; materials: DeviceMaterial[]; device_storages: DeviceStorage[]; device_colors: DeviceColor[]; created_at: string; updated_at: string; }
+interface DeviceInfoCreateData { model?: string; brand?: string; release_date?: string; screen?: string; chip_ram?: string; camera?: string; battery?: string; connectivity_os?: string; color_english?: string; dimensions_weight?: string; sensors_health_features?: string; warranty?: string; }
 
 const DeviceInfoManagementPage: React.FC = () => {
   const [deviceInfos, setDeviceInfos] = useState<DeviceInfo[]>([]);
@@ -97,9 +29,13 @@ const DeviceInfoManagementPage: React.FC = () => {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedDeviceInfos, setSelectedDeviceInfos] = useState<string[]>([]);
+  
+  // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
+  const itemsPerPage = 10;
+
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedDevice, setSelectedDevice] = useState<DeviceInfo | null>(null);
@@ -107,24 +43,37 @@ const DeviceInfoManagementPage: React.FC = () => {
 
   // Import Excel states
   const [showImportModal, setShowImportModal] = useState(false);
-  const [importData, setImportData] = useState<any[]>([]);
-  const [importErrors, setImportErrors] = useState<string[]>([]);
-
-  const itemsPerPage = 8;
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
 
   // === LOAD DATA ===
-  const loadDeviceInfos = async (page = 1) => {
+  const loadDeviceInfos = useCallback(async (page = 1) => {
     try {
       setLoading(true);
       const params: any = { page, limit: itemsPerPage, include_details: true };
       if (searchTerm.trim()) params.search = searchTerm.trim();
 
       const response = await api.get('/device-infos', { params });
-      const data: ApiResponse = response.data;
+      const data = response.data;
 
-      setDeviceInfos(data.data || []);
-      setTotalItems(data.total || 0);
-      setTotalPages(data.totalPages || 1);
+      let items: DeviceInfo[] = [];
+      let total = 0;
+      let pages = 1;
+
+      if (Array.isArray(data)) {
+          items = data;
+          total = data.length;
+          pages = Math.ceil(total / itemsPerPage);
+      } else {
+          // Handle different response structures
+          items = data.data || data.items || [];
+          total = data.total || data.total_items || items.length;
+          pages = data.totalPages || data.pages || Math.ceil(total / itemsPerPage);
+      }
+
+      setDeviceInfos(items);
+      setTotalItems(total);
+      setTotalPages(Math.max(1, pages));
       setCurrentPage(page);
     } catch (error: any) {
       const errorMessage = error?.response?.data?.detail || error?.response?.data?.message || 'Không thể tải dữ liệu';
@@ -135,141 +84,75 @@ const DeviceInfoManagementPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [searchTerm]);
 
   const loadAllDeviceBrands = async () => {
     try {
       const response = await deviceBrandService.getAllDeviceBrands();
       setDeviceBrands(response || []);
     } catch (err) {
-      toast.error('Không thể tải danh sách thương hiệu');
+      console.error(err);
     }
   };
 
   // === EXPORT EXCEL ===
-  const exportToExcel = () => {
-    if (deviceInfos.length === 0) {
-      toast.error('Không có dữ liệu để xuất Excel');
-      return;
+  const exportToExcel = async () => {
+    try {
+      const response = await api.get('/device-infos/export', { responseType: 'blob' });
+      const blob = new Blob([response.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      saveAs(blob, `Thong_tin_thiet_bi_${new Date().toISOString().slice(0,10)}.xlsx`);
+      toast.success('Đã xuất file Excel thành công!');
+    } catch (error) {
+      toast.error('Lỗi xuất Excel từ server');
     }
-
-    const exportData = deviceInfos.map((item) => ({
-      'Thương hiệu': item.brand,
-      'Model': item.model,
-      'Ngày ra mắt': item.release_date ? new Date(item.release_date).toLocaleDateString('vi-VN') : '-',
-      'Màn hình': item.screen || '-',
-      'Chip & RAM': item.chip_ram || '-',
-      'Camera': item.camera || '-',
-      'Pin': item.battery || '-',
-      'Kết nối & HĐH': item.connectivity_os || '-',
-      'Màu sắc': getAllColors(item).join(', ') || '-',
-      'Kích thước & Trọng lượng': item.dimensions_weight || '-',
-      'Cảm biến & Sức khỏe': item.sensors_health_features || '-',
-      'Bảo hành': item.warranty || '-',
-      'Dung lượng': item.device_storages.map(s => `${s.capacity}GB`).join(', ') || '-',
-      'Ngày tạo': new Date(item.created_at).toLocaleDateString('vi-VN'),
-    }));
-
-    const worksheet = XLSX.utils.json_to_sheet(exportData);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Thiết bị');
-    worksheet['!cols'] = Object.keys(exportData[0] || {}).map(() => ({ wch: 30 }));
-
-    const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
-    const fileName = `Thong_tin_thiet_bi_${new Date().toISOString().slice(0,10)}.xlsx`;
-    const blob = new Blob([excelBuffer], { type: 'application/octet-stream' });
-    saveAs(blob, fileName);
-
-    toast.success(`Đã xuất ${deviceInfos.length} thiết bị ra Excel!`);
   };
 
   // === IMPORT EXCEL ===
-  const handleImportExcel = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      try {
-        const bstr = evt.target?.result;
-        const wb = XLSX.read(bstr, { type: 'binary' });
-        const wsname = wb.SheetNames[0];
-        const ws = wb.Sheets[wsname];
-        const data = XLSX.utils.sheet_to_json(ws, { header: 1 });
-
-        if (data.length < 2) {
-          toast.error('File Excel trống hoặc không có dữ liệu');
-          return;
-        }
-
-        const headers = data[0] as string[];
-        const rows = data.slice(1);
-
-        const parsed = rows.map((row: any, index) => {
-          const obj: any = {};
-          headers.forEach((h, i) => {
-            obj[h] = row[i];
-          });
-          return { ...obj, _row: index + 2 };
-        });
-
-        const errors: string[] = [];
-        const validData = parsed.filter((item) => {
-          if (!item['Model']) {
-            errors.push(`Dòng ${item._row}: Thiếu Model`);
-            return false;
-          }
-          if (!item['Thương hiệu']) {
-            errors.push(`Dòng ${item._row}: Thiếu Thương hiệu`);
-            return false;
-          }
-          return true;
-        });
-
-        setImportData(validData);
-        setImportErrors(errors);
-        setShowImportModal(true);
-      } catch (err) {
-        toast.error('File Excel không hợp lệ');
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (e.target.files && e.target.files[0]) {
+          setImportFile(e.target.files[0]);
+          setImportError(null);
       }
-    };
-    reader.readAsBinaryString(file);
   };
 
   const confirmImport = async () => {
-    if (importData.length === 0) return;
+    if (!importFile) {
+        setImportError("Vui lòng chọn file Excel");
+        return;
+    }
 
     try {
       setActionLoading('import');
-      const payload = importData.map(item => ({
-        model: item['Model'],
-        brand: item['Thương hiệu'],
-        release_date: item['Ngày ra mắt'] || null,
-        screen: item['Màn hình'] || null,
-        chip_ram: item['Chip & RAM'] || null,
-        camera: item['Camera'] || null,
-        battery: item['Pin'] || null,
-        connectivity_os: item['Kết nối & HĐH'] || null,
-        color_english: item['Màu sắc'] || null,
-        dimensions_weight: item['Kích thước & Trọng lượng'] || null,
-        sensors_health_features: item['Cảm biến & Sức khỏe'] || null,
-        warranty: item['Bảo hành'] || null,
-      }));
+      const formData = new FormData();
+      formData.append('file', importFile);
 
-      await api.post('/device-infos/bulk', payload);
-      toast.success(`Nhập thành công ${payload.length} thiết bị!`);
+      // Fix: Gọi đúng endpoint POST /import thay vì /bulk
+      await api.post('/device-infos/import', formData); 
+
+      toast.success(`Nhập dữ liệu thành công!`);
       setShowImportModal(false);
-      setImportData([]);
-      setImportErrors([]);
+      setImportFile(null);
       loadDeviceInfos(1);
     } catch (error: any) {
-      toast.error(error?.response?.data?.detail || 'Lỗi nhập dữ liệu');
+      const msg = error?.response?.data?.detail || 'Lỗi nhập dữ liệu';
+      setImportError(msg);
     } finally {
       setActionLoading(null);
     }
   };
 
-  // === CÁC HÀM KHÁC ===
+  // === DOWNLOAD TEMPLATE ===
+  const downloadTemplate = async () => {
+      try {
+          const response = await api.get('/device-infos/export-template', { responseType: 'blob' });
+          const blob = new Blob([response.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+          saveAs(blob, 'Mau_nhap_thong_tin_thiet_bi.xlsx');
+      } catch (error) {
+          toast.error('Không thể tải file mẫu');
+      }
+  };
+
+  // === ACTIONS ===
   const handleCreateDeviceInfo = async (data: DeviceInfoCreateData) => {
     try {
       setActionLoading('create');
@@ -286,19 +169,13 @@ const DeviceInfoManagementPage: React.FC = () => {
     }
   };
 
-  const handleViewDetails = (device: DeviceInfo) => {
-    setSelectedDevice(device);
-    setShowDetailModal(true);
-  };
-
   const handleDeleteDeviceInfo = async (deviceId: string) => {
     if (!window.confirm('Bạn có chắc chắn muốn xóa?')) return;
     try {
       setActionLoading(`delete-${deviceId}`);
       await api.delete(`/device-infos/${deviceId}`);
       toast.success('Xóa thành công');
-      setDeviceInfos(prev => prev.filter(item => item.id !== deviceId));
-      setSelectedDeviceInfos(prev => prev.filter(id => id !== deviceId));
+      
       if (deviceInfos.length === 1 && currentPage > 1) {
         loadDeviceInfos(currentPage - 1);
       } else {
@@ -316,7 +193,7 @@ const DeviceInfoManagementPage: React.FC = () => {
     }
   };
 
-  const handleBulkAction = async (action: 'delete') => {
+  const handleBulkAction = async () => {
     if (selectedDeviceInfos.length === 0) {
       toast.error('Chọn ít nhất một item');
       return;
@@ -324,11 +201,17 @@ const DeviceInfoManagementPage: React.FC = () => {
     if (!window.confirm(`Xác nhận xóa ${selectedDeviceInfos.length} item?`)) return;
     try {
       setActionLoading('bulk');
-      const results = await Promise.allSettled(
-        selectedDeviceInfos.map(id => api.delete(`/device-infos/${id}`))
-      );
-      const successful = results.filter(r => r.status === 'fulfilled').length;
-      toast.success(`Xóa thành công ${successful}/${selectedDeviceInfos.length} item`);
+      // Thử gọi endpoint xóa nhiều (nếu có) hoặc loop
+      // Giả sử backend hỗ trợ POST /device-infos/delete-multiple hoặc loop client
+      try {
+          await api.post('/device-infos/delete-multiple', selectedDeviceInfos);
+      } catch (e) {
+          // Fallback loop
+          await Promise.all(selectedDeviceInfos.map(id => api.delete(`/device-infos/${id}`)));
+      }
+      
+      toast.success(`Đã xử lý xóa ${selectedDeviceInfos.length} item`);
+      setSelectedDeviceInfos([]);
       loadDeviceInfos(currentPage);
     } catch (error) {
       toast.error('Lỗi bulk action');
@@ -350,9 +233,9 @@ const DeviceInfoManagementPage: React.FC = () => {
   };
 
   const paginate = (pageNumber: number) => {
-    const page = Math.max(1, Math.min(totalPages, pageNumber));
-    setCurrentPage(page);
-    loadDeviceInfos(page);
+    if (pageNumber >= 1 && pageNumber <= totalPages) {
+        loadDeviceInfos(pageNumber);
+    }
   };
 
   const getPageRange = () => {
@@ -408,6 +291,48 @@ const DeviceInfoManagementPage: React.FC = () => {
     return () => clearTimeout(timer);
   }, [searchTerm]);
 
+  // Render Pagination Component
+  const renderPagination = () => {
+      const pages = [];
+      // Luôn hiển thị pagination
+      const total = Math.max(1, totalPages); 
+      
+      for (let i = 1; i <= total; i++) {
+          if (i === 1 || i === total || (i >= currentPage - 1 && i <= currentPage + 1)) {
+              pages.push(i);
+          } else if (pages[pages.length - 1] !== '...') {
+              pages.push('...');
+          }
+      }
+
+      return (
+        <div className="d-flex align-items-center gap-1">
+            <button className="btn btn-outline-primary btn-sm rounded-pill px-3" onClick={() => paginate(currentPage - 1)} disabled={currentPage === 1 || loading}>
+                <FontAwesomeIcon icon={faChevronLeft} className="small me-1" /> Trước
+            </button>
+            {pages.map((page, index) => (
+                <React.Fragment key={index}>
+                    {page === '...' ? (
+                        <span className="px-2 text-muted">...</span>
+                    ) : (
+                        <button 
+                            className={`btn btn-sm rounded-pill px-3 ${currentPage === page ? 'btn-primary text-white' : 'btn-outline-primary'}`} 
+                            onClick={() => paginate(page as number)} 
+                            disabled={loading}
+                            style={{ minWidth: '32px' }}
+                        >
+                            {page}
+                        </button>
+                    )}
+                </React.Fragment>
+            ))}
+            <button className="btn btn-outline-primary btn-sm rounded-pill px-3" onClick={() => paginate(currentPage + 1)} disabled={currentPage === total || loading}>
+                Sau <FontAwesomeIcon icon={faChevronRight} className="small ms-1" />
+            </button>
+        </div>
+      );
+  };
+
   return (
     <div className="container-fluid px-3 py-3">
       {/* Header */}
@@ -415,9 +340,9 @@ const DeviceInfoManagementPage: React.FC = () => {
         <div>
           <h1 className="h4 mb-1 text-dark fw-bold d-flex align-items-center">
             <FontAwesomeIcon icon={faMobileAlt} className="me-2 text-primary" />
-            Quản lý Thiết Bị
+            Quản lý Thông Tin Thiết Bị
           </h1>
-          <p className="text-muted mb-0 small">Quản lý thông tin kỹ thuật thiết bị</p>
+          <p className="text-muted mb-0 small">Quản lý dữ liệu gốc (Model, Cấu hình) của thiết bị</p>
         </div>
         <div className="d-flex gap-2">
           <button
@@ -432,18 +357,18 @@ const DeviceInfoManagementPage: React.FC = () => {
           {/* IMPORT EXCEL */}
           <button
             className="btn btn-outline-info btn-sm rounded-pill px-3 d-flex align-items-center"
-            onClick={() => document.getElementById('import-excel-input')?.click()}
+            onClick={() => document.getElementById('import-excel-input-info')?.click()}
             title="Nhập từ Excel"
           >
             <FontAwesomeIcon icon={faFileExcel} className="me-1" />
             Import Excel
           </button>
           <input
-            id="import-excel-input"
+            id="import-excel-input-info"
             type="file"
             accept=".xlsx,.xls"
             className="d-none"
-            onChange={handleImportExcel}
+            onChange={handleFileChange}
           />
 
           {/* EXPORT EXCEL */}
@@ -489,28 +414,13 @@ const DeviceInfoManagementPage: React.FC = () => {
             </div>
             <div className="col-lg-3">
               <label className="form-label small text-muted fw-medium">Hành động</label>
-              <div className="dropdown">
-                <button
-                  className="btn btn-outline-secondary btn-sm dropdown-toggle w-100 rounded-pill"
-                  type="button"
-                  data-bs-toggle="dropdown"
-                  disabled={selectedDeviceInfos.length === 0 || actionLoading === 'bulk'}
-                >
-                  <span className="me-1">Hành động</span>
-                  <span className="badge bg-primary rounded-pill">{selectedDeviceInfos.length}</span>
-                </button>
-                <ul className="dropdown-menu shadow-sm">
-                  <li>
-                    <button
-                      className="dropdown-item text-danger d-flex align-items-center small"
-                      onClick={() => handleBulkAction('delete')}
-                    >
-                      <FontAwesomeIcon icon={faTrash} className="me-2" />
-                      Xóa đã chọn
-                    </button>
-                  </li>
-                </ul>
-              </div>
+              <button
+                className="btn btn-outline-danger btn-sm w-100 rounded-pill"
+                onClick={handleBulkAction}
+                disabled={selectedDeviceInfos.length === 0 || actionLoading === 'bulk'}
+              >
+                {actionLoading === 'bulk' ? <FontAwesomeIcon icon={faSpinner} spin /> : <><FontAwesomeIcon icon={faTrash} className="me-1" />Xóa ({selectedDeviceInfos.length})</>}
+              </button>
             </div>
           </div>
         </div>
@@ -526,20 +436,20 @@ const DeviceInfoManagementPage: React.FC = () => {
                   <th width="30" className="text-center px-2">
                     <input type="checkbox" className="form-check-input" checked={deviceInfos.length > 0 && deviceInfos.every(item => selectedDeviceInfos.includes(item.id))} onChange={toggleSelectAll} />
                   </th>
-                  <th width="80" className="fw-semibold px-2">Thương hiệu</th>
-                  <th width="90" className="fw-semibold px-2">Model</th>
-                  <th width="80" className="fw-semibold px-2">Ngày ra mắt</th>
-                  <th width="80" className="fw-semibold px-2">Màn hình</th>
-                  <th width="80" className="fw-semibold px-2">Chip/RAM</th>
-                  <th width="90" className="fw-semibold px-2">Camera</th>
-                  <th width="70" className="fw-semibold px-2">Pin</th>
-                  <th width="90" className="fw-semibold px-2">Kết nối/HĐH</th>
-                  <th width="80" className="fw-semibold px-2">Màu sắc</th>
-                  <th width="100" className="fw-semibold px-2">K.thước/T.lượng</th>
-                  <th width="100" className="fw-semibold px-2">Cảm biến</th>
-                  <th width="80" className="fw-semibold px-2">Bảo hành</th>
-                  <th width="80" className="fw-semibold px-2">Ngày tạo</th>
-                  <th width="70" className="fw-semibold text-center px-2">Thao tác</th>
+                  <th className="fw-semibold px-2">Thương hiệu</th>
+                  <th className="fw-semibold px-2">Model</th>
+                  <th className="fw-semibold px-2">Ngày ra mắt</th>
+                  <th className="fw-semibold px-2">Màn hình</th>
+                  <th className="fw-semibold px-2">Chip/RAM</th>
+                  <th className="fw-semibold px-2">Camera</th>
+                  <th className="fw-semibold px-2">Pin</th>
+                  <th className="fw-semibold px-2">Kết nối/HĐH</th>
+                  <th className="fw-semibold px-2">Màu sắc</th>
+                  <th className="fw-semibold px-2">K.thước/T.lượng</th>
+                  <th className="fw-semibold px-2">Cảm biến</th>
+                  <th className="fw-semibold px-2">Bảo hành</th>
+                  <th className="fw-semibold px-2">Ngày tạo</th>
+                  <th className="fw-semibold text-center px-2">Thao tác</th>
                 </tr>
               </thead>
               <tbody>
@@ -585,25 +495,15 @@ const DeviceInfoManagementPage: React.FC = () => {
               </tbody>
             </table>
           </div>
-
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="card-footer bg-light d-flex justify-content-between align-items-center p-2">
-              <small className="text-muted">
-                Hiển thị <strong>{(currentPage - 1) * itemsPerPage + 1}</strong> -{' '}
-                <strong>{Math.min(currentPage * itemsPerPage, totalItems)}</strong> / <strong>{totalItems}</strong>
-              </small>
-              <div className="d-flex align-items-center gap-1">
-                <button className="btn btn-outline-primary btn-sm rounded-pill px-3 d-flex align-items-center" onClick={() => paginate(currentPage - 1)} disabled={currentPage === 1 || loading}><FontAwesomeIcon icon={faChevronLeft} className="small" /></button>
-                <div className="d-flex gap-1">
-                  {getPageRange().map((page) => (
-                    <button key={page} className={`btn btn-sm rounded-pill px-3 ${currentPage === page ? 'btn-primary text-white' : 'btn-outline-primary'}`} onClick={() => paginate(page)} disabled={loading} style={{ minWidth: '2rem' }}>{page}</button>
-                  ))}
-                </div>
-                <button className="btn btn-outline-primary btn-sm rounded-pill px-3 d-flex align-items-center" onClick={() => paginate(currentPage + 1)} disabled={currentPage === totalPages || loading}><FontAwesomeIcon icon={faChevronRight} className="small" /></button>
-              </div>
-            </div>
-          )}
+          
+          {/* Pagination (Luôn hiển thị) */}
+          <div className="card-footer bg-light d-flex flex-column flex-sm-row justify-content-between align-items-center p-3 gap-2">
+            <small className="text-muted">
+              Hiển thị <strong>{totalItems > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0}</strong> -{' '}
+              <strong>{Math.min(currentPage * itemsPerPage, totalItems)}</strong> / <strong>{totalItems}</strong> bản ghi
+            </small>
+            {renderPagination()}
+          </div>
         </div>
       </div>
 
@@ -636,7 +536,7 @@ const DeviceInfoManagementPage: React.FC = () => {
                 <div className="modal-footer bg-light rounded-bottom p-2">
                   <button type="button" className="btn btn-secondary btn-sm rounded-pill px-3" onClick={() => setShowCreateModal(false)} disabled={actionLoading !== null}>Hủy</button>
                   <button type="submit" className="btn btn-primary btn-sm rounded-pill px-3" disabled={actionLoading !== null}>
-                    {actionLoading ? (<><span className="spinner-border spinner-border-sm me-2" />Đang tạo...</>) : ('Tạo mới')}
+                    {actionLoading ? (<><FontAwesomeIcon icon={faSpinner} spin className="me-2" />Đang tạo...</>) : ('Tạo mới')}
                   </button>
                 </div>
               </form>
@@ -655,6 +555,11 @@ const DeviceInfoManagementPage: React.FC = () => {
                 <button type="button" className="btn-close btn-close-white" onClick={() => setShowImportModal(false)} />
               </div>
               <div className="modal-body p-3">
+                <div className="d-flex justify-content-end mb-3">
+                    <button className="btn btn-outline-primary btn-sm" onClick={downloadTemplate}>
+                        <FontAwesomeIcon icon={faFileExcel} className="me-2"/>Tải file mẫu chuẩn
+                    </button>
+                </div>
                 {importErrors.length > 0 && (
                   <div className="alert alert-warning small">
                     <strong>Lỗi dữ liệu ({importErrors.length}):</strong>
@@ -693,12 +598,12 @@ const DeviceInfoManagementPage: React.FC = () => {
                 <button
                   className="btn btn-success btn-sm rounded-pill px-3"
                   onClick={confirmImport}
-                  disabled={actionLoading === 'import' || importData.length === 0}
+                  disabled={actionLoading === 'import' || !importFile}
                 >
                   {actionLoading === 'import' ? (
-                    <><span className="spinner-border spinner-border-sm me-2" />Đang nhập...</>
+                    <><FontAwesomeIcon icon={faSpinner} spin className="me-2" />Đang nhập...</>
                   ) : (
-                    `Nhập ${importData.length} thiết bị`
+                    `Xác nhận Nhập`
                   )}
                 </button>
               </div>

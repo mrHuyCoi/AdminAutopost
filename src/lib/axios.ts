@@ -4,7 +4,7 @@ import qs from 'qs';
 
 const apiClient = axios.create({
   // baseURL: 'http://127.0.0.1:8000/api/v1',
-  baseURL: 'https://b5396953a94f.ngrok-free.app/api/v1',
+  baseURL: 'https://afeea541b3ca.ngrok-free.app/api/v1',
   timeout: 10000,
 });
 
@@ -70,3 +70,5 @@ apiClient.interceptors.response.use(
 );
 
 export default apiClient;
+
+

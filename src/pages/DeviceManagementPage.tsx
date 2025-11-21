@@ -1,15 +1,18 @@
 // src/pages/DeviceManagementPage.tsx
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
-  faEdit, faTrash, faPlus, faSpinner, faSearch, faFilter, faSync,
+  faEdit, faTrash, faPlus, faSpinner, faSearch, faSync,
   faMobileAlt, faTabletAlt, faLaptop, faCopy, faExclamationTriangle,
-  faFileExcel, faFileImport, faFileExport, faDownload, faUpload
+  faFileImport, faFileExport, faDownload
 } from '@fortawesome/free-solid-svg-icons';
 
+// Import api instance từ file axios config của bạn
+import api from '../lib/axios'; 
+
 import { 
-  userDeviceService, deviceInfoService, colorService, storageService 
+  deviceInfoService, colorService, storageService, userDeviceService 
 } from '../services/deviceService';
 
 import {
@@ -45,11 +48,29 @@ function useDebounce(value: string, delay: number) {
   return debouncedValue;
 }
 
+// --- HELPER: Tải file từ Blob ---
+const handleDownloadBlob = (data: any, filename: string) => {
+    // Kiểm tra nếu data không phải Blob (ví dụ JSON lỗi)
+    if (!(data instanceof Blob)) return;
+
+    const blob = new Blob([data], { 
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+    });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+};
+
 const DeviceManagementPage: React.FC = () => {
   const [devices, setDevices] = useState<UserDeviceDetailRead[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [pagination, setPagination] = useState<any>(null);
+  const [pagination, setPagination] = useState<any>({ page: 1, total_pages: 1, total: 0 });
 
   const [deviceInfos, setDeviceInfos] = useState<DeviceInfoRead[]>([]);
   const [colors, setColors] = useState<Color[]>([]);
@@ -98,6 +119,7 @@ const DeviceManagementPage: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
+      // GET /api/v1/user-devices [cite: 197] hoặc my-devices [cite: 199]
       const res = await userDeviceService.getMyDevices(page, 10, search, type);
       setDevices(res.items ?? []);
       setPagination({
@@ -137,11 +159,16 @@ const DeviceManagementPage: React.FC = () => {
     }
   };
 
-  // Excel Export Function
+  // --- EXPORT EXCEL ---
   const handleExportExcel = async () => {
     try {
       setIsExporting(true);
-      await userDeviceService.exportToExcel(debouncedSearchTerm, filterType);
+      // Endpoint: GET /api/v1/user-devices/export [cite: 189]
+      const response = await api.get('/user-devices/export', { 
+          params: { search: debouncedSearchTerm, type: filterType === 'all' ? '' : filterType },
+          responseType: 'blob' 
+      });
+      handleDownloadBlob(response.data, `Danh_sach_thiet_bi_${new Date().toISOString().slice(0,10)}.xlsx`);
     } catch (err: any) {
       setError(err.response?.data?.message || 'Lỗi xuất file Excel');
     } finally {
@@ -149,11 +176,9 @@ const DeviceManagementPage: React.FC = () => {
     }
   };
 
-  // Excel Import Functions
   const handleImportFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      // Check if file is Excel format
       const validTypes = [
         'application/vnd.ms-excel',
         'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -171,6 +196,7 @@ const DeviceManagementPage: React.FC = () => {
     }
   };
 
+  // --- IMPORT EXCEL (SỬA LỖI: XÓA CONTENT-TYPE THỦ CÔNG) ---
   const handleImportExcel = async () => {
     if (!importFile) {
       setImportError('Vui lòng chọn file Excel để nhập');
@@ -182,40 +208,60 @@ const DeviceManagementPage: React.FC = () => {
       setImportError(null);
       setImportSuccess(null);
 
-      const result = await userDeviceService.importFromExcel(importFile);
+      const formData = new FormData();
+      formData.append('file', importFile); 
+
+      // QUAN TRỌNG: Không thêm header 'Content-Type'.
+      // Để interceptor trong src/lib/axios.ts tự xử lý FormData.
+      // Endpoint: POST /api/v1/user-devices/import [cite: 187]
+      const response = await api.post('/user-devices/import', formData);
+
+      const result = response.data;
+      const successCount = result.successCount ?? result.imported_count ?? 0;
+      const errors = result.errors ?? [];
+
+      setImportSuccess(`Nhập thành công ${successCount} thiết bị.`);
       
-      setImportSuccess(`Nhập thành công ${result.successCount} thiết bị. ${result.errors.length > 0 ? `Lỗi: ${result.errors.length}` : ''}`);
-      
-      if (result.errors.length > 0) {
-        console.error('Lỗi nhập liệu:', result.errors);
+      if (errors.length > 0) {
+        setImportError(`Có ${errors.length} dòng lỗi. Vui lòng kiểm tra lại file.`);
+        console.error('Import Errors:', errors);
+      } else {
+          // Load lại trang 1 nếu thành công
+          loadPageData(pagination?.page ?? 1, debouncedSearchTerm, filterType);
+          setTimeout(() => {
+            setShowImportModal(false);
+            setImportFile(null);
+            setImportSuccess(null);
+          }, 2000);
       }
 
-      // Reload data
-      loadPageData(pagination?.page ?? 1, debouncedSearchTerm, filterType);
-      
-      // Close modal after 2 seconds if successful
-      setTimeout(() => {
-        if (result.errors.length === 0) {
-          setShowImportModal(false);
-          setImportFile(null);
-        }
-      }, 2000);
-
     } catch (err: any) {
-      setImportError(err.response?.data?.message || 'Lỗi nhập file Excel');
+      console.error("Lỗi import:", err);
+      const msg = err.response?.data?.detail || err.response?.data?.message || 'Lỗi kết nối hoặc định dạng file không hợp lệ.';
+      setImportError(msg);
     } finally {
       setIsImporting(false);
     }
   };
 
+  // --- DOWNLOAD TEMPLATE (CHUYỂN SANG ENDPOINT EXPORT-TEMPLATE) ---
   const downloadTemplate = async () => {
     try {
-      await userDeviceService.downloadTemplate();
+      setImportError(null);
+      // SỬA: Dùng endpoint /user-devices/export-template  thay vì /template
+      // Endpoint này ổn định hơn cho việc tải file mẫu
+      const response = await api.get('/user-devices/export-template', { 
+          responseType: 'blob' 
+      });
+      
+      handleDownloadBlob(response.data, 'Mau_nhap_lieu_thiet_bi.xlsx');
     } catch (err: any) {
-      setImportError(err.response?.data?.message || 'Lỗi tải template');
+      console.error("Lỗi download template:", err);
+      setImportError('Không thể tải file mẫu (Lỗi 404/500 từ Server).');
     }
   };
 
+  // ... (Giữ nguyên phần còn lại: Modal handlers, Render logic) ...
   const openAddModal = () => {
     setCurrentData(initialFormState);
     setStorages([]);
@@ -297,16 +343,24 @@ const DeviceManagementPage: React.FC = () => {
     setIsSaving(true);
     setModalError(null);
 
+    // Clean data
+    const cleanData = {
+        ...currentData,
+        color_id: currentData.color_id === "" ? null : currentData.color_id,
+        device_storage_id: currentData.device_storage_id === "" ? null : currentData.device_storage_id,
+        product_code: currentData.product_code === "" ? null : currentData.product_code,
+    };
+
     try {
       if (isEditMode && editId) {
-        await userDeviceService.updateUserDevice(editId, currentData as UserDeviceUpdate);
+        await userDeviceService.updateUserDevice(editId, cleanData as UserDeviceUpdate);
       } else {
-        await userDeviceService.createUserDevice(currentData as UserDeviceCreate);
+        await userDeviceService.createUserDevice(cleanData as UserDeviceCreate);
       }
       closeModal();
       loadPageData(pagination?.page ?? 1, debouncedSearchTerm, filterType);
     } catch (err: any) {
-      setModalError(err.response?.data?.message || 'Lỗi lưu thiết bị');
+      setModalError(err.response?.data?.detail || err.response?.data?.message || 'Lỗi lưu thiết bị');
     } finally {
       setIsSaving(false);
     }
@@ -349,7 +403,7 @@ const DeviceManagementPage: React.FC = () => {
   };
 
   const renderPagination = () => {
-    if (!pagination || pagination.total_pages <= 1) return null;
+    if (!pagination) return null;
 
     const current = pagination.page;
     const total = pagination.total_pages;
@@ -363,10 +417,15 @@ const DeviceManagementPage: React.FC = () => {
     if (pages[pages.length - 1] < total) pages.push(total);
 
     return (
-      <div className="d-flex justify-content-center align-items-center gap-1 mt-3">
-        <button className="btn btn-sm btn-outline-secondary rounded-pill px-3" onClick={() => changePage(current - 1)} disabled={current === 1}>
+      <div className="d-flex justify-content-center align-items-center gap-1 mt-0">
+        <button 
+            className="btn btn-sm btn-outline-secondary rounded-pill px-3" 
+            onClick={() => changePage(current - 1)} 
+            disabled={current === 1}
+        >
           Trước
         </button>
+        
         {pages.map((p, i) => (
           <React.Fragment key={p}>
             {pages[i - 1] && pages[i - 1] + 1 < p && (
@@ -380,7 +439,12 @@ const DeviceManagementPage: React.FC = () => {
             </button>
           </React.Fragment>
         ))}
-        <button className="btn btn-sm btn-outline-secondary rounded-pill px-3" onClick={() => changePage(current + 1)} disabled={current === total}>
+        
+        <button 
+            className="btn btn-sm btn-outline-secondary rounded-pill px-3" 
+            onClick={() => changePage(current + 1)} 
+            disabled={current === total}
+        >
           Sau
         </button>
       </div>
@@ -420,9 +484,9 @@ const DeviceManagementPage: React.FC = () => {
       return (
         <tr>
           <td colSpan={12} className="text-center py-5 text-muted">
-            <FontAwesomeIcon icon={faFilter} size="3x" className="mb-3 opacity-25" />
-            <p className="mb-1 fw-medium">Không có thiết bị</p>
-            <small>Nhấn nút <strong>"Thêm mới"</strong> để bắt đầu</small>
+            <FontAwesomeIcon icon={faSearch} size="3x" className="mb-3 opacity-25" />
+            <p className="mb-1 fw-medium">Không tìm thấy thiết bị nào</p>
+            <small>Thử thay đổi bộ lọc hoặc thêm thiết bị mới</small>
           </td>
         </tr>
       );
@@ -527,6 +591,7 @@ const DeviceManagementPage: React.FC = () => {
           <div className="modal-backdrop fade show" style={{ zIndex: 1040 }}></div>
         )}
 
+        {/* Add/Edit Modal */}
         {showModal && (
           <div className="modal fade show d-block" style={{ zIndex: 1050 }} tabIndex={-1}>
             <div className="modal-dialog modal-dialog-centered modal-xl">
@@ -563,7 +628,7 @@ const DeviceManagementPage: React.FC = () => {
                         <div className="mb-3">
                           <label className="form-label fw-semibold">Màu sắc</label>
                           <select className="form-select rounded-3" name="color_id" value={currentData.color_id ?? ''} onChange={handleInputChange} disabled={isSaving}>
-                            <option value="">-- Chọn màu --</option>
+                            <option value="">-- Chọn màu (Không bắt buộc) --</option>
                             {colors.map((c) => (
                               <option key={c.id} value={c.id}>{c.name}</option>
                             ))}
@@ -573,7 +638,7 @@ const DeviceManagementPage: React.FC = () => {
                         <div className="mb-3">
                           <label className="form-label fw-semibold">Dung lượng</label>
                           <select className="form-select rounded-3" name="device_storage_id" value={currentData.device_storage_id ?? ''} onChange={handleInputChange} disabled={loadingStorages || isSaving || !currentData.device_info_id}>
-                            <option value="">{loadingStorages ? 'Đang tải...' : '-- Chọn dung lượng --'}</option>
+                            <option value="">{loadingStorages ? 'Đang tải...' : '-- Chọn dung lượng (Không bắt buộc) --'}</option>
                             {storages.map((s) => (
                               <option key={s.id} value={s.id}>{s.capacity}GB</option>
                             ))}
@@ -653,6 +718,7 @@ const DeviceManagementPage: React.FC = () => {
           </div>
         )}
 
+        {/* Delete Modal */}
         {showDeleteModal && (
           <div className="modal fade show d-block" style={{ zIndex: 1060 }} tabIndex={-1}>
             <div className="modal-dialog modal-dialog-centered">
@@ -876,7 +942,9 @@ const DeviceManagementPage: React.FC = () => {
             </table>
           </div>
         </div>
-        {pagination && pagination.total > 0 && (
+        
+        {/* PAGINATION BAR */}
+        {pagination && (
           <div className="card-footer bg-light d-flex justify-content-between align-items-center flex-wrap gap-3 p-3">
             <small className="text-muted">
               Hiển thị <strong>{devices.length}</strong> trên <strong>{pagination.total}</strong>

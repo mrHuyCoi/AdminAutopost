@@ -1,97 +1,88 @@
-// src/contexts/AuthContext.tsx
-import React, { createContext, useState, useContext, useEffect } from 'react';
-import apiClient from '../lib/axios';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
+import api from '../lib/axios'; // Đảm bảo đường dẫn đúng tới axios config của bạn
 
-interface User {
-  id: string;
-  email: string;
-  full_name: string;
-  role: string;
-}
+// QUAN TRỌNG: Thống nhất tên key là 'accessToken'
+const TOKEN_KEY = 'accessToken';
 
 interface AuthContextType {
-  isAuthenticated: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  logout: () => void;
-  user: User | null;
+  user: any;
   loading: boolean;
+  login: (email: string, password: string) => Promise<any>;
+  logout: () => void;
+  fetchUser: () => Promise<void>;
+  isAuthenticated: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [user, setUser] = useState<User | null>(null);
+export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const checkAuth = async () => {
-    const token = localStorage.getItem('access_token');
+  const fetchUser = useCallback(async () => {
+    const token = localStorage.getItem(TOKEN_KEY);
+    // Nếu không có token, dừng ngay, không gọi API
     if (!token) {
-      setLoading(false);
-      return;
+        setUser(null);
+        setLoading(false);
+        return;
     }
+
     try {
-      const response = await apiClient.get('/users/me');
+      const response = await api.get('/users/me');
       setUser(response.data);
-      setIsAuthenticated(true);
     } catch (error) {
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('user');
-      setIsAuthenticated(false);
+      console.error('Failed to fetch user:', error);
+      setUser(null);
+      // Nếu token lỗi, có thể xóa luôn để bắt đăng nhập lại
+      // localStorage.removeItem(TOKEN_KEY);
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    checkAuth();
   }, []);
 
   const login = async (email: string, password: string) => {
     try {
-      const formData = new URLSearchParams();
-      formData.append('username', email);
-      formData.append('password', password);
-      console.log('Gửi login (form-urlencoded):', formData.toString());
-
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/auth/login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: formData,
+      // Lưu ý: API của bạn dùng 'username' hay 'email'? Sửa lại dòng dưới nếu cần.
+      const response = await api.post('/auth/login', {
+        username: email, 
+        password
       });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.detail || `Đăng nhập thất bại (${response.status})`);
+      
+      // Lấy token từ response (kiểm tra kỹ cấu trúc trả về của API)
+      const token = response.data.access_token || response.data.token;
+      
+      if (token) {
+        localStorage.setItem(TOKEN_KEY, token);
+        await fetchUser();
       }
-
-      const data = await response.json();
-      console.log('Đăng nhập thành công:', data);
-
-      const { access_token, user: userData } = data;
-
-      localStorage.setItem('access_token', access_token);
-      localStorage.setItem('user', JSON.stringify(userData));
-
-      setUser(userData);
-      setIsAuthenticated(true);
-    } catch (error: any) {
-      console.error('Lỗi đăng nhập:', error);
+      
+      return response.data;
+    } catch (error) {
+      console.error('Login failed:', error);
       throw error;
     }
-  }; // ← ĐÂY LÀ DẤU NGOẶC BỊ THIẾU TRƯỚC ĐÓ!!!
-
-  const logout = () => {
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('user');
-    setUser(null);
-    setIsAuthenticated(false);
   };
 
+  const logout = () => {
+    localStorage.removeItem(TOKEN_KEY);
+    setUser(null);
+    window.location.href = '/login';
+  };
+
+  useEffect(() => {
+    fetchUser();
+  }, [fetchUser]);
+
   return (
-    <AuthContext.Provider value={{ isAuthenticated, login, logout, user, loading }}>
+    <AuthContext.Provider value={{ 
+      user, 
+      loading, 
+      login, 
+      logout, 
+      fetchUser,
+      isAuthenticated: !!user 
+    }}>
       {children}
     </AuthContext.Provider>
   );

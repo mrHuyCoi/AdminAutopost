@@ -7,34 +7,34 @@ export const serviceService = {
   
   /**
    * Lấy danh sách services (đã sửa để khớp với BE)
-   * @param skip - Số mục bỏ qua (page - 1) * limit
-   * @param limit - Số lượng mục mỗi trang
-   * @param search - Chuỗi tìm kiếm (đã gộp)
+   * BE yêu cầu: page, limit, search
    */
   getAllServices: async (
     skip: number, 
-    limit: number = 10,
+    limit: number = 100,
     search: string = ''
   ): Promise<any> => {
     try {
+      // ⭐ FIX PHÂN TRANG: Convert skip → page
+      const page = Math.floor(skip / limit) + 1;
+
       const params: any = {
-        skip: skip,
+        page: page,   // BE nhận đúng param này
         limit: limit,
         search: search
       };
       
-      console.log('🚀 [serviceService] Đang gọi API Get All Services với params:', params);
+      console.log('🚀 [serviceService] Gọi API Get All Services với params:', params);
 
-      const response = await http.get(API_SERVICES, { params: params });
+      const response = await http.get(API_SERVICES, { params });
       console.log("🚀 SERVICE API RESPONSE:", response.data);
-      // Trả về toàn bộ response.data (chứa data và metadata)
+
       return response.data;
 
     } catch (error: any) {
       console.error('❌ [serviceService] Lỗi khi gọi getAllServices:', error);
       throw error;
     }
-    
   },
 
   // Lấy service theo ID
@@ -77,12 +77,11 @@ export const serviceService = {
   },
 
   /**
-   * Xóa nhiều services (đã sửa để khớp với BE)
-   * BE mong đợi một mảng [id1, id2] trong body
+   * Xóa nhiều services
    */
   bulkDeleteServices: async (ids: string[]): Promise<void> => {
     await http.delete(`${API_SERVICES}/bulk`, { 
-      data: ids // Gửi mảng trực tiếp
+      data: ids
     });
   }
 };

@@ -1,7 +1,7 @@
 // src/pages/SubscriptionPlanPage.tsx
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import StatCard from '../components/StatCard';
+import StatCard from '../components/StatCard'; // Lưu ý: Component này chưa được dùng trong code cũ, nhưng tôi giữ nguyên import
 import { SubscriptionPlan, SubscriptionPlanCreate, SubscriptionPlanUpdate } from '../types/subscriptionPlan';
 import { subscriptionPlanService } from '../services/subscriptionPlanService';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
@@ -41,6 +41,10 @@ const SubscriptionPlanPage: React.FC = () => {
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
+  // --- STATE PHÂN TRANG ---
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10; // Số lượng hiển thị mỗi trang
+
   useEffect(() => {
     const titleElement = document.getElementById('pageTitle');
     const subtitleElement = document.getElementById('pageSubtitle');
@@ -53,18 +57,17 @@ const SubscriptionPlanPage: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
-      // const plansResponse = await subscriptionPlanService.getAllPlans();
-      // setPlans(plansResponse);
       const plansResponse = await subscriptionPlanService.getAllPlans();
 
-const data =
-  Array.isArray(plansResponse)
-    ? plansResponse
-    : Array.isArray(plansResponse?.data)
-      ? plansResponse.data
-      : [];
+      const data =
+        Array.isArray(plansResponse)
+          ? plansResponse
+          : Array.isArray(plansResponse?.data)
+            ? plansResponse.data
+            : [];
 
-setPlans(data);
+      setPlans(data);
+      setCurrentPage(1); // Reset về trang 1 khi tải lại dữ liệu
 
     } catch (err: any) {
       console.error('Error loading plans:', err);
@@ -74,6 +77,17 @@ setPlans(data);
       setLoading(false);
     }
   };
+
+  // --- LOGIC TÍNH TOÁN PHÂN TRANG ---
+  const indexOfLastItem = currentPage * itemsPerPage;
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+  const currentPlans = plans.slice(indexOfFirstItem, indexOfLastItem);
+  const totalPages = Math.max(1, Math.ceil(plans.length / itemsPerPage)); // Đảm bảo ít nhất là 1 trang
+
+  const handlePageChange = (pageNumber: number) => {
+    setCurrentPage(pageNumber);
+  };
+  // ----------------------------------
 
   const handleAddNewClick = () => {
     setCurrentData(initialCreateState);
@@ -163,7 +177,17 @@ setPlans(data);
     setDeleteError(null);
     try {
       await subscriptionPlanService.deletePlan(deleteId);
-      setPlans(prev => prev.filter(p => p.id !== deleteId));
+      
+      // Logic cập nhật lại danh sách và trang
+      setPlans(prev => {
+        const newPlans = prev.filter(p => p.id !== deleteId);
+        // Nếu trang hiện tại trống sau khi xóa và không phải trang 1, lùi lại 1 trang
+        if (currentPage > 1 && newPlans.length <= (currentPage - 1) * itemsPerPage) {
+            setCurrentPage(prevPage => prevPage - 1);
+        }
+        return newPlans;
+      });
+
       handleCloseDeleteModal();
     } catch (err: any) {
       console.error('Error deleting plan:', err);
@@ -323,7 +347,8 @@ setPlans(data);
                       </td>
                     </tr>
                   ) : (
-                    plans.map((plan) => (
+                    // SỬ DỤNG currentPlans THAY VÌ plans ĐỂ HIỂN THỊ THEO TRANG
+                    currentPlans.map((plan) => (
                       <tr key={plan.id} className={!plan.is_active ? 'opacity-75' : ''}>
                         <td style={{ paddingLeft: '1.5rem' }}>
                           <div className="fw-semibold">{plan.name}</div>
@@ -359,6 +384,32 @@ setPlans(data);
               </table>
             </div>
           </div>
+
+          {/* PHẦN PHÂN TRANG (LUÔN HIỂN THỊ) */}
+          <div className="card-footer bg-white d-flex flex-column flex-sm-row justify-content-between align-items-center py-3 gap-2">
+             <div className="small text-muted">
+                Hiển thị <strong>{plans.length > 0 ? indexOfFirstItem + 1 : 0}</strong> - <strong>{Math.min(indexOfLastItem, plans.length)}</strong> trong số <strong>{plans.length}</strong> gói
+             </div>
+             <nav>
+                <ul className="pagination pagination-sm mb-0">
+                   <li className={`page-item ${currentPage === 1 ? 'disabled' : ''}`}>
+                      <button className="page-link" onClick={() => handlePageChange(currentPage - 1)}>Trước</button>
+                   </li>
+                   
+                   {/* Render số trang */}
+                   {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                      <li key={page} className={`page-item ${currentPage === page ? 'active' : ''}`}>
+                         <button className="page-link" onClick={() => handlePageChange(page)}>{page}</button>
+                      </li>
+                   ))}
+
+                   <li className={`page-item ${currentPage === totalPages ? 'disabled' : ''}`}>
+                      <button className="page-link" onClick={() => handlePageChange(currentPage + 1)}>Sau</button>
+                   </li>
+                </ul>
+             </nav>
+          </div>
+
         </div>
       </div>
 

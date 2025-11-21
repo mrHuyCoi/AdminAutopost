@@ -1,5 +1,4 @@
-// src/contexts/BrandContext.tsx
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { Brand } from '../types/brand';
 import { brandService } from '../services/brandService';
 
@@ -16,45 +15,59 @@ interface BrandContextType {
 const BrandContext = createContext<BrandContextType | undefined>(undefined);
 
 export const BrandProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [brands, setBrands] = useState<Brand[]>([]); // Khởi tạo là mảng rỗng
-  const [loading, setLoading] = useState(true);
+  const [brands, setBrands] = useState<Brand[]>([]);
+
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const loadBrands = async () => {
+  const loadBrands = useCallback(async () => {
+    const token = localStorage.getItem('token');  // <-- Fix đúng key
+
+    if (!token) {
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);
-      
-      // Sửa ở đây:
-      // 1. Đổi tên 'brandsData' thành 'response' cho rõ nghĩa
-      const response = await brandService.getAllBrands(1, 1000); 
+
+      const response = await api.post('/auth/login', {
+        email: email,
+        password
+      });
+
 
       let brandsArray: Brand[] = [];
-
-      // 2. Thêm logic kiểm tra cấu trúc response, giống như bạn làm ở loadServices
-      if (response && response.data && Array.isArray(response.data)) {
-        // Trường hợp API trả về: { data: [...] }
+      if (response?.data && Array.isArray(response.data)) {
         brandsArray = response.data;
+      } else if (response?.items && Array.isArray(response.items)) {
+        brandsArray = response.items;
       } else if (Array.isArray(response)) {
-        // Trường hợp API trả về: [...]
         brandsArray = response;
-      } else {
-        // Trường hợp lạ, log lỗi nhưng vẫn set mảng rỗng để không crash
-        console.warn("Cấu trúc dữ liệu brands không xác định:", response);
       }
-      
-      // 3. Set state bằng mảng đã xử lý
+
       setBrands(brandsArray);
 
     } catch (err: any) {
-      const errorMsg = err.response?.data?.message || 'Lỗi tải danh sách thương hiệu';
-      setError(errorMsg);
-      setBrands([]); // Đảm bảo set mảng rỗng khi lỗi
-      console.error('Error loading brands:', err);
+      if (err.response && (err.response.status === 401 || err.response.status === 403)) {
+        console.warn("User chưa xác thực, dừng tải Brands.");
+        setBrands([]);
+      } else {
+        const errorMsg = err.response?.data?.message || 'Lỗi tải danh sách thương hiệu';
+        setError(errorMsg);
+      }
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  // Chỉ gọi 1 lần duy nhất
+  useEffect(() => {
+    loadBrands();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
 
   const refreshBrands = async () => {
     await loadBrands();
@@ -74,7 +87,9 @@ export const BrandProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   useEffect(() => {
     loadBrands();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
 
   return (
     <BrandContext.Provider value={{

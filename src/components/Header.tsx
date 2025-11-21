@@ -1,19 +1,13 @@
 // src/components/Header.tsx
 import React, { useState, useRef, useEffect } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { authService } from '../services/auth.service';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
   faBars,
-  faSearch,
   faChevronDown,
-  faUserEdit,
   faSignOutAlt,
-  faBell,
-  faCog,
-  faMoon,
-  faSun
 } from '@fortawesome/free-solid-svg-icons';
 
 // =========================
@@ -46,18 +40,11 @@ const Header: React.FC = () => {
   const pageSubtitle = pageTitle !== "Dashboard" ? `Trang / ${pageTitle}` : "Tổng quan hệ thống";
 
   const [showDropdown, setShowDropdown] = useState(false);
-  const [darkMode, setDarkMode] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const handleLogout = () => {
     authService.logout();
     navigate('/login');
-  };
-
-  const toggleDarkMode = () => {
-    const newMode = !darkMode;
-    setDarkMode(newMode);
-    document.documentElement.setAttribute('data-theme', newMode ? 'dark' : 'light');
   };
 
   const userInitials = user?.full_name
@@ -89,10 +76,7 @@ const Header: React.FC = () => {
         </div>
 
         <div className="d-flex align-items-center gap-2">
-          <button className="btn btn-light btn-sm position-relative">
-            <FontAwesomeIcon icon={faBell} className="text-muted" />
-            <span className="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style={{fontSize: '0.6rem'}}>3</span>
-          </button>
+          {/* Đã xóa nút thông báo ở đây */}
 
           <div className="dropdown" ref={dropdownRef}>
             <div 
@@ -111,14 +95,6 @@ const Header: React.FC = () => {
                   <div className="text-muted small">{user?.role || 'Administrator'}</div>
                 </div>
                 <div className="p-2">
-                  <Link className="dropdown-item px-3 py-2" to="/admin/profile" onClick={() => setShowDropdown(false)}>
-                    <FontAwesomeIcon icon={faUserEdit} className="me-2 text-primary" /> Hồ sơ cá nhân
-                  </Link>
-                  <button className="dropdown-item px-3 py-2 w-100 border-0 bg-transparent" onClick={toggleDarkMode}>
-                    <FontAwesomeIcon icon={darkMode ? faSun : faMoon} className="me-2 text-warning" />
-                    {darkMode ? 'Chế độ sáng' : 'Chế độ tối'}
-                  </button>
-                  <hr />
                   <button className="dropdown-item px-3 py-2 text-danger w-100 border-0 bg-transparent" onClick={handleLogout}>
                     <FontAwesomeIcon icon={faSignOutAlt} className="me-2" /> Đăng xuất
                   </button>
@@ -138,18 +114,7 @@ const Header: React.FC = () => {
         </div>
 
         <div className="d-flex align-items-center gap-4">
-          <button className="btn btn-light rounded-circle p-2" onClick={toggleDarkMode}>
-            <FontAwesomeIcon icon={darkMode ? faSun : faMoon} className={darkMode ? 'text-warning' : 'text-muted'} />
-          </button>
-
-          <button className="btn btn-light position-relative rounded-circle p-2">
-            <FontAwesomeIcon icon={faBell} className="text-muted" />
-            <span className="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style={{fontSize: '0.6rem'}}>3</span>
-          </button>
-
-          <button className="btn btn-light rounded-circle p-2">
-            <FontAwesomeIcon icon={faCog} className="text-muted" />
-          </button>
+          {/* Đã xóa nút Dark Mode, Thông báo và Cài đặt ở đây */}
 
           <div className="dropdown" ref={dropdownRef}>
             <button 
@@ -180,14 +145,6 @@ const Header: React.FC = () => {
                   <div className="text-muted small">{user?.email || 'admin@example.com'}</div>
                 </div>
                 <div className="p-2">
-                  <Link className="dropdown-item px-3 py-2" to="/admin/profile" onClick={() => setShowDropdown(false)}>
-                    <FontAwesomeIcon icon={faUserEdit} className="me-2 text-primary" /> Hồ sơ cá nhân
-                  </Link>
-                  <button className="dropdown-item px-3 py-2 w-100 border-0 bg-transparent" onClick={toggleDarkMode}>
-                    <FontAwesomeIcon icon={darkMode ? faSun : faMoon} className="me-2 text-warning" />
-                    {darkMode ? 'Chế độ sáng' : 'Chế độ tối'}
-                  </button>
-                  <hr />
                   <button className="dropdown-item px-3 py-2 text-danger w-100 border-0 bg-transparent" onClick={handleLogout}>
                     <FontAwesomeIcon icon={faSignOutAlt} className="me-2" /> Đăng xuất
                   </button>
@@ -198,7 +155,6 @@ const Header: React.FC = () => {
         </div>
       </div>
 
-      {/* FIX: Dùng jsx global */}
       <style jsx global>{`
         .user-menu:hover {
           background-color: #f8f9fa !important;

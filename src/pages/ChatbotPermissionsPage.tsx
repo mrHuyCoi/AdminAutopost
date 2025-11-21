@@ -35,7 +35,12 @@ const ChatbotPermissionPage: React.FC = () => {
     const [subscriptions, setSubscriptions] = useState<UserChatbotSubscription[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    
+    // Filter & Pagination State
     const [activeTab, setActiveTab] = useState<'pending' | 'approved' | 'rejected' | 'all'>('pending');
+    const [currentPage, setCurrentPage] = useState(1);
+    const itemsPerPage = 10;
+
     const [actionLoading, setActionLoading] = useState<string | null>(null);
 
     // Modal states
@@ -48,7 +53,7 @@ const ChatbotPermissionPage: React.FC = () => {
     const [selectedUser, setSelectedUser] = useState<UserChatbotSubscription['user'] | null>(null);
 
     // Dùng ID Admin cố định
-    const currentAdminId: string | null = "869e4ec5-3f10-4dad-9fa9-5dbff4d83bc3"; // <-- GIỮ NGUYÊN
+    const currentAdminId: string | null = "869e4ec5-3f10-4dad-9fa9-5dbff4d83bc3"; 
 
     const loadSubscriptions = async () => {
         try {
@@ -64,7 +69,11 @@ const ChatbotPermissionPage: React.FC = () => {
                         ? res.data
                         : [];
 
+            // Sắp xếp mới nhất lên đầu
+            list.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
             setSubscriptions(list);
+            setCurrentPage(1); // Reset trang khi reload
         } catch (err: any) {
             const errorMessage = getErrorMessage(err);
             setError(errorMessage);
@@ -74,10 +83,45 @@ const ChatbotPermissionPage: React.FC = () => {
         }
     };
 
-
     useEffect(() => {
         loadSubscriptions();
     }, []);
+
+    // Reset về trang 1 khi chuyển Tab
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [activeTab]);
+
+    // --- LOGIC LỌC VÀ PHÂN TRANG ---
+    const filteredSubscriptions = useMemo(() => {
+        if (activeTab === 'all') return subscriptions;
+        return subscriptions.filter(s => s.status === activeTab);
+    }, [subscriptions, activeTab]);
+
+    const totalItems = filteredSubscriptions.length;
+    const totalPages = Math.max(1, Math.ceil(totalItems / itemsPerPage));
+    
+    // Cắt dữ liệu cho trang hiện tại
+    const paginatedSubscriptions = useMemo(() => {
+        const startIndex = (currentPage - 1) * itemsPerPage;
+        return filteredSubscriptions.slice(startIndex, startIndex + itemsPerPage);
+    }, [filteredSubscriptions, currentPage, itemsPerPage]);
+
+    const handlePageChange = (page: number) => {
+        if (page >= 1 && page <= totalPages) {
+            setCurrentPage(page);
+        }
+    };
+    // ---------------------------------
+
+    const stats = useMemo(() => {
+        const total = subscriptions.length;
+        const pending = subscriptions.filter(s => s.status === 'pending').length;
+        const approved = subscriptions.filter(s => s.status === 'approved').length;
+        const rejected = subscriptions.filter(s => s.status === 'rejected').length;
+        const active = subscriptions.filter(s => s.is_active).length;
+        return { total, pending, approved, rejected, active };
+    }, [subscriptions]);
 
     const handleActionClick = (
         id: string,
@@ -116,12 +160,10 @@ const ChatbotPermissionPage: React.FC = () => {
         e.preventDefault();
         if (!actionId || !actionType || !selectedUser) return;
         
-        // SỬA: Bỏ điều kiện kiểm tra lỗi đang ngăn API chạy
         if (!currentAdminId) {
             toast.error('Lỗi cấu hình: Không tìm thấy ID Admin.');
             return;
         }
-
 
         const notes = actionNotes.trim();
         if (actionType === 'reject' && !notes) {
@@ -134,11 +176,9 @@ const ChatbotPermissionPage: React.FC = () => {
 
         try {
             if (actionType === 'approve') {
-                // ĐÃ SỬA: Truyền adminId vào hàm approveSubscription
                 await chatbotSubscriptionService.approveSubscription(actionId, currentAdminId, notes || null);
                 toast.success('Đã phê duyệt thành công');
             } else {
-                // ĐÃ SỬA: Truyền adminId vào hàm rejectSubscription
                 await chatbotSubscriptionService.rejectSubscription(actionId, currentAdminId, notes);
                 toast.success('Đã từ chối đăng ký');
             }
@@ -160,7 +200,14 @@ const ChatbotPermissionPage: React.FC = () => {
         try {
             await chatbotSubscriptionService.deleteSubscription(deleteId);
             toast.success('Đã xóa đăng ký');
+            
             setSubscriptions(prev => prev.filter(s => s.id !== deleteId));
+            
+            // Logic: Nếu trang hiện tại trống sau khi xóa, lùi lại 1 trang
+            if (paginatedSubscriptions.length === 1 && currentPage > 1) {
+                setCurrentPage(prev => prev - 1);
+            }
+
             handleCloseModals();
         } catch (err: any) {
             const errorMessage = getErrorMessage(err);
@@ -169,20 +216,6 @@ const ChatbotPermissionPage: React.FC = () => {
             setActionLoading(null);
         }
     };
-
-    const filteredSubscriptions = useMemo(() => {
-        if (activeTab === 'all') return subscriptions;
-        return subscriptions.filter(s => s.status === activeTab);
-    }, [subscriptions, activeTab]);
-
-    const stats = useMemo(() => {
-        const total = subscriptions.length;
-        const pending = subscriptions.filter(s => s.status === 'pending').length;
-        const approved = subscriptions.filter(s => s.status === 'approved').length;
-        const rejected = subscriptions.filter(s => s.status === 'rejected').length;
-        const active = subscriptions.filter(s => s.is_active).length;
-        return { total, pending, approved, rejected, active };
-    }, [subscriptions]);
 
     const renderSubscriptionTable = () => {
         if (loading) {
@@ -218,7 +251,7 @@ const ChatbotPermissionPage: React.FC = () => {
             );
         }
 
-        if (filteredSubscriptions.length === 0) {
+        if (paginatedSubscriptions.length === 0) {
             return (
                 <tr>
                     <td colSpan={7} className="text-center py-5 text-muted">
@@ -230,7 +263,7 @@ const ChatbotPermissionPage: React.FC = () => {
             );
         }
 
-        return filteredSubscriptions.map((sub) => (
+        return paginatedSubscriptions.map((sub) => (
             <tr key={sub.id} className={`transition-all ${!sub.is_active ? 'opacity-75' : ''}`}>
                 <td className="ps-4 py-3">
                     <div className="d-flex align-items-center">
@@ -456,6 +489,32 @@ const ChatbotPermissionPage: React.FC = () => {
                         </table>
                     </div>
                 </div>
+
+                {/* PHÂN TRANG (FOOTER) */}
+                {totalPages > 1 && (
+                    <div className="card-footer bg-white d-flex flex-column flex-sm-row justify-content-between align-items-center py-3 px-4 gap-3">
+                        <div className="small text-muted">
+                            Hiển thị <strong>{(currentPage - 1) * itemsPerPage + 1}</strong> - <strong>{Math.min(currentPage * itemsPerPage, totalItems)}</strong> trong <strong>{totalItems}</strong> kết quả
+                        </div>
+                        <nav>
+                            <ul className="pagination pagination-sm mb-0">
+                                <li className={`page-item ${currentPage === 1 ? 'disabled' : ''}`}>
+                                    <button className="page-link" onClick={() => handlePageChange(currentPage - 1)}>Trước</button>
+                                </li>
+                                
+                                {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                                    <li key={page} className={`page-item ${currentPage === page ? 'active' : ''}`}>
+                                        <button className="page-link" onClick={() => handlePageChange(page)}>{page}</button>
+                                    </li>
+                                ))}
+
+                                <li className={`page-item ${currentPage === totalPages ? 'disabled' : ''}`}>
+                                    <button className="page-link" onClick={() => handlePageChange(currentPage + 1)}>Sau</button>
+                                </li>
+                            </ul>
+                        </nav>
+                    </div>
+                )}
             </div>
 
             {/* === MODAL PORTAL === */}
@@ -483,7 +542,7 @@ const ChatbotPermissionPage: React.FC = () => {
                                             <div className="alert alert-info d-flex justify-content-between align-items-center mb-3">
                                                 <div>
                                                     <strong>Người dùng:</strong> {selectedUser.full_name || 'N/A'}
-                                                    <span className="text-muted">({selectedUser.email})</span>
+                                                    <span className="text-muted"> ({selectedUser.email})</span>
                                                 </div>
                                                 <button
                                                     type="button"

@@ -1,15 +1,25 @@
 // src/pages/StorageManagementPage.tsx
 import React, { useState, useEffect, useMemo } from 'react';
-import { faAndroid } from '@fortawesome/free-brands-svg-icons';
 import { createPortal } from 'react-dom';
 import api from '../lib/axios';
 import toast from 'react-hot-toast';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
-  faPlus, faSpinner,
-  faDatabase, faSave, faTimes, faSearch,
-  faHdd, faFilter, faMicrochip, faExclamationTriangle,
-  faEye
+  faPlus,
+  faDatabase,
+  faSave,
+  faTimes,
+  faSearch,
+  faHdd,
+  faMicrochip,
+  faExclamationTriangle,
+  faEye,
+  faSpinner,
+  // Icon đúng tên trong free-solid-svg-icons
+  faAngleDoubleLeft,
+  faAngleDoubleRight,
+  faAngleLeft,
+  faAngleRight
 } from '@fortawesome/free-solid-svg-icons';
 
 interface DeviceInfo {
@@ -54,8 +64,12 @@ const StorageManagementPage: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [error, setError] = useState<string | null>(null);
 
+  // Phân trang
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
   const [showModal, setShowModal] = useState(false);
-  const [isEditMode, setIsEditMode] = useState(false); 
+  const [isEditMode, setIsEditMode] = useState(false);
   const [currentStorage, setCurrentStorage] = useState<StorageCreate | Storage>(initialFormState);
   const [showViewModal, setShowViewModal] = useState(false);
   const [viewingStorage, setViewingStorage] = useState<Storage | null>(null);
@@ -63,10 +77,9 @@ const StorageManagementPage: React.FC = () => {
   const loadStorages = async () => {
     try {
       setError(null);
-      const response = await api.get('/device-storages/all'); 
-      
+      const response = await api.get('/device-storages/all');
       let data = response.data;
-      
+
       if (data && data.data && Array.isArray(data.data)) {
         data = data.data;
       } else if (data && Array.isArray(data.items)) {
@@ -74,26 +87,25 @@ const StorageManagementPage: React.FC = () => {
       } else if (Array.isArray(data)) {
         data = data;
       }
-      
+
       const storagesData = Array.isArray(data) ? data : [];
-      
+
       const transformedStorages = storagesData.map((item: any) => ({
-        id: item.storage_id,
-        storage_id: item.storage_id,
-        device_id: item.device_id,
-        device_model: item.device_model,
+        storage_id: item.storage_id || item.id || Math.random().toString(36).substr(2, 9),
+        device_id: item.device_id || item.device_info_id,
+        device_model: item.device_model || 'Unknown Device',
         capacity: item.capacity,
-        name: `${item.capacity}GB`,
-        device_info_id: item.device_id,
-        description: `Dung lượng ${item.capacity}GB cho ${item.device_model}`
+        name: item.name || `${item.capacity}GB`,
+        description: item.description || `Dung lượng ${item.capacity}GB cho ${item.device_model || 'thiết bị'}`,
+        created_at: item.created_at || new Date().toISOString(),
+        device_info_id: item.device_info_id || item.device_id,
       }));
-      
+
       setStorages(transformedStorages);
-      
     } catch (err: any) {
       console.error('Error loading storages:', err);
-      const errorMessage = err?.response?.data?.detail 
-        || err?.response?.data?.message 
+      const errorMessage = err?.response?.data?.detail
+        || err?.response?.data?.message
         || 'Không thể tải danh sách dung lượng';
       setError(errorMessage);
       toast.error(errorMessage);
@@ -104,14 +116,12 @@ const StorageManagementPage: React.FC = () => {
     try {
       const response = await api.get('/device-infos', {
         params: { page: 1, limit: 100 }
-      }); 
-      
+      });
+
       let data = response.data;
-      
       if (data && data.data && Array.isArray(data.data)) {
         data = data.data;
       }
-      
       setDeviceInfos(Array.isArray(data) ? data : []);
     } catch (err: any) {
       console.error('Error loading device infos:', err);
@@ -129,23 +139,31 @@ const StorageManagementPage: React.FC = () => {
     });
   }, []);
 
-  const processedStorages = useMemo(() => {
-    return storages.map(storage => {
-      return storage;
-    });
-  }, [storages]);
+  // Reset về trang 1 khi tìm kiếm
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
 
   const filteredStorages = useMemo(() => {
-    if (!searchTerm.trim()) return processedStorages;
+    if (!searchTerm.trim()) return storages;
 
     const searchLower = searchTerm.toLowerCase();
-    return processedStorages.filter(storage =>
+    return storages.filter(storage =>
       storage.name?.toLowerCase().includes(searchLower) ||
-      (storage.description && storage.description.toLowerCase().includes(searchLower)) ||
-      (storage.device_model && storage.device_model.toLowerCase().includes(searchLower)) ||
+      storage.description?.toLowerCase().includes(searchLower) ||
+      storage.device_model?.toLowerCase().includes(searchLower) ||
       storage.capacity.toString().includes(searchTerm)
     );
-  }, [processedStorages, searchTerm]);
+  }, [storages, searchTerm]);
+
+  const paginatedStorages = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    const end = start + pageSize;
+    return filteredStorages.slice(start, end);
+  }, [filteredStorages, currentPage, pageSize]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredStorages.length / pageSize));
+  const totalItems = filteredStorages.length;
 
   const handleAddNew = () => {
     setIsEditMode(false);
@@ -156,10 +174,6 @@ const StorageManagementPage: React.FC = () => {
     setShowModal(true);
   };
 
-  const handleEdit = (storage: Storage) => {
-    toast.error('Chức năng Sửa (PUT) chưa được định nghĩa trong API backend.');
-  };
-  
   const handleView = (storage: Storage) => {
     setViewingStorage(storage);
     setShowViewModal(true);
@@ -176,11 +190,6 @@ const StorageManagementPage: React.FC = () => {
 
   const handleSaveStorage = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (isEditMode) {
-      toast.error('API Sửa (PUT) không tồn tại.');
-      return;
-    }
 
     if (!currentStorage.name.trim()) {
       toast.error('Tên dung lượng không được để trống');
@@ -204,28 +213,27 @@ const StorageManagementPage: React.FC = () => {
         device_info_id: (currentStorage as StorageCreate).device_info_id,
         description: currentStorage.description?.trim() || null
       };
-      
-      const response = await api.post('/device-storages', createData, { 
+
+      const response = await api.post('/device-storages', createData, {
         headers: { 'Content-Type': 'application/json' }
       });
-      
+
       const deviceInfo = deviceInfos.find(d => d.id === createData.device_info_id);
-      
+
       const newStorage: Storage = {
-        storage_id: response.data.id || Math.random().toString(36).substr(2, 9),
+        storage_id: response.data.storage_id || response.data.id || Math.random().toString(36).substr(2, 9),
         device_id: createData.device_info_id,
         device_model: deviceInfo?.model || 'Unknown Device',
         capacity: createData.capacity,
         name: createData.name,
         description: createData.description || undefined,
         device_info_id: createData.device_info_id,
-        created_at: new Date().toISOString() 
+        created_at: new Date().toISOString()
       };
-      
+
       toast.success('Thêm dung lượng thành công');
       setStorages(prev => [newStorage, ...prev]);
       handleCloseModals();
-      
     } catch (err: any) {
       console.error('Error saving storage:', err);
       const errorData = err?.response?.data;
@@ -236,8 +244,9 @@ const StorageManagementPage: React.FC = () => {
         } else {
           errorMessage = errorData.detail;
         }
-      } else if (errorData?.message) { errorMessage = errorData.message; }
-      
+      } else if (errorData?.message) {
+        errorMessage = errorData.message;
+      }
       toast.error(`Lỗi khi thêm dung lượng: ${errorMessage}`);
     } finally {
       setActionLoading(null);
@@ -248,11 +257,10 @@ const StorageManagementPage: React.FC = () => {
     const { name, value, type } = e.target;
     setCurrentStorage(prev => ({
       ...prev,
-      [name]: type === 'number' ? Number(value) : value
+      [name]: type === 'number' ? Number(value) || 0 : value
     }));
   };
 
-  // Badge theo dung lượng
   const getCapacityBadge = (capacity: number) => {
     if (capacity >= 512) return 'bg-danger text-white';
     if (capacity >= 256) return 'bg-warning text-dark';
@@ -273,6 +281,7 @@ const StorageManagementPage: React.FC = () => {
         </tr>
       ));
     }
+
     if (error) {
       return (
         <tr>
@@ -286,6 +295,7 @@ const StorageManagementPage: React.FC = () => {
         </tr>
       );
     }
+
     if (filteredStorages.length === 0) {
       return (
         <tr>
@@ -296,8 +306,8 @@ const StorageManagementPage: React.FC = () => {
         </tr>
       );
     }
-    
-    return filteredStorages.map((storage) => (
+
+    return paginatedStorages.map((storage) => (
       <tr key={storage.storage_id} className="hover-lift">
         <td className="align-middle">
           <div className="d-flex align-items-center gap-3">
@@ -328,7 +338,7 @@ const StorageManagementPage: React.FC = () => {
             {storage.created_at && new Date(storage.created_at).toLocaleDateString('vi-VN')}
           </div>
         </td>
-        <td className="align-middle">
+        <td className="align-middle text-center">
           <button
             className="btn btn-outline-info btn-sm rounded-pill px-3"
             title="Xem chi tiết"
@@ -340,6 +350,83 @@ const StorageManagementPage: React.FC = () => {
         </td>
       </tr>
     ));
+  };
+
+  const renderPagination = () => {
+    const startItem = totalItems === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+    const endItem = Math.min(currentPage * pageSize, totalItems);
+
+    return (
+      <div className="card-footer bg-light border-top-0 py-4">
+        <div className="d-flex flex-column flex-md-row justify-content-between align-items-center gap-3">
+          <div className="text-muted small">
+            Hiển thị {startItem} đến {endItem} trong tổng số <strong>{totalItems}</strong> bản ghi
+          </div>
+
+          <div className="d-flex align-items-center gap-3">
+            <select
+              className="form-select form-select-sm w-auto"
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value));
+                setCurrentPage(1);
+              }}
+            >
+              {[10, 25, 50].map(size => (
+                <option key={size} value={size}>{size} / trang</option>
+              ))}
+            </select>
+
+            <nav aria-label="Page navigation">
+              <ul className="pagination pagination-sm mb-0">
+                <li className={`page-item ${currentPage === 1 ? 'disabled' : ''}`}>
+                  <button className="page-link" onClick={() => setCurrentPage(1)} disabled={currentPage === 1}>
+                    <FontAwesomeIcon icon={faAngleDoubleLeft} />
+                  </button>
+                </li>
+                <li className={`page-item ${currentPage === 1 ? 'disabled' : ''}`}>
+                  <button className="page-link" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}>
+                    <FontAwesomeIcon icon={faAngleLeft} />
+                  </button>
+                </li>
+
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                  let pageNum: number;
+                  if (totalPages <= 5) {
+                    pageNum = i + 1;
+                  } else if (currentPage <= 3) {
+                    pageNum = i + 1;
+                  } else if (currentPage >= totalPages - 2) {
+                    pageNum = totalPages - 4 + i;
+                  } else {
+                    pageNum = currentPage - 2 + i;
+                  }
+
+                  return (
+                    <li key={pageNum} className={`page-item ${currentPage === pageNum ? 'active' : ''}`}>
+                      <button className="page-link" onClick={() => setCurrentPage(pageNum)}>
+                        {pageNum}
+                      </button>
+                    </li>
+                  );
+                })}
+
+                <li className={`page-item ${currentPage === totalPages ? 'disabled' : ''}`}>
+                  <button className="page-link" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>
+                    <FontAwesomeIcon icon={faAngleRight} />
+                  </button>
+                </li>
+                <li className={`page-item ${currentPage === totalPages ? 'disabled' : ''}`}>
+                  <button className="page-link" onClick={() => setCurrentPage(totalPages)} disabled={currentPage === totalPages}>
+                    <FontAwesomeIcon icon={faAngleDoubleRight} />
+                  </button>
+                </li>
+              </ul>
+            </nav>
+          </div>
+        </div>
+      </div>
+    );
   };
 
   const renderModals = () => {
@@ -430,8 +517,8 @@ const StorageManagementPage: React.FC = () => {
                     <button type="button" className="btn btn-secondary rounded-pill px-4" onClick={handleCloseModals} disabled={!!actionLoading}>
                       <FontAwesomeIcon icon={faTimes} className="me-2" /> Hủy
                     </button>
-                    <button 
-                      type="submit" 
+                    <button
+                      type="submit"
                       className="btn btn-primary rounded-pill px-4"
                       disabled={!!actionLoading}
                     >
@@ -521,7 +608,7 @@ const StorageManagementPage: React.FC = () => {
               </div>
               <span>Quản lý Dung lượng</span>
             </h1>
-            <button 
+            <button
               className="btn btn-primary rounded-pill px-4 shadow-sm"
               onClick={handleAddNew}
               disabled={loading || deviceInfos.length === 0}
@@ -569,7 +656,7 @@ const StorageManagementPage: React.FC = () => {
                 <div className="card-body text-center p-4">
                   <FontAwesomeIcon icon={faHdd} size="2x" className="mb-2" />
                   <h5 className="card-title mb-1">Tổng dung lượng</h5>
-                  <h3 className="mb-0 fw-bold">{processedStorages.length}</h3>
+                  <h3 className="mb-0 fw-bold">{storages.length}</h3>
                 </div>
               </div>
             </div>
@@ -600,6 +687,9 @@ const StorageManagementPage: React.FC = () => {
                 </table>
               </div>
             </div>
+
+            {/* Phân trang luôn hiển thị */}
+            {renderPagination()}
           </div>
         </div>
       </div>
@@ -612,11 +702,12 @@ const StorageManagementPage: React.FC = () => {
           box-shadow: 0 8px 20px rgba(0,0,0,0.1) !important;
           background-color: #f8f9fa !important;
         }
-        .avatar {
-          box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-        }
-        .card:hover {
-          box-shadow: 0 .5rem 1.5rem rgba(0,0,0,.1) !important;
+        .avatar { box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+        .card:hover { box-shadow: 0 .5rem 1.5rem rgba(0,0,0,.1) !important; }
+        .page-item.active .page-link {
+          background-color: #667eea !important;
+          border-color: #667eea !important;
+          color: white !important;
         }
       `}</style>
     </div>
