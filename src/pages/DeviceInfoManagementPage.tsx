@@ -29,7 +29,7 @@ const DeviceInfoManagementPage: React.FC = () => {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedDeviceInfos, setSelectedDeviceInfos] = useState<string[]>([]);
-  
+
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
@@ -61,14 +61,14 @@ const DeviceInfoManagementPage: React.FC = () => {
       let pages = 1;
 
       if (Array.isArray(data)) {
-          items = data;
-          total = data.length;
-          pages = Math.ceil(total / itemsPerPage);
+        items = data;
+        total = data.length;
+        pages = Math.ceil(total / itemsPerPage);
       } else {
-          // Handle different response structures
-          items = data.data || data.items || [];
-          total = data.total || data.total_items || items.length;
-          pages = data.totalPages || data.pages || Math.ceil(total / itemsPerPage);
+        // Handle different response structures
+        items = data.data || data.items || [];
+        total = data.total || data.total_items || items.length;
+        pages = data.totalPages || data.pages || Math.ceil(total / itemsPerPage);
       }
 
       setDeviceInfos(items);
@@ -100,7 +100,7 @@ const DeviceInfoManagementPage: React.FC = () => {
     try {
       const response = await api.get('/device-infos/export', { responseType: 'blob' });
       const blob = new Blob([response.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-      saveAs(blob, `Thong_tin_thiet_bi_${new Date().toISOString().slice(0,10)}.xlsx`);
+      saveAs(blob, `Thong_tin_thiet_bi_${new Date().toISOString().slice(0, 10)}.xlsx`);
       toast.success('Đã xuất file Excel thành công!');
     } catch (error) {
       toast.error('Lỗi xuất Excel từ server');
@@ -109,16 +109,16 @@ const DeviceInfoManagementPage: React.FC = () => {
 
   // === IMPORT EXCEL ===
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-      if (e.target.files && e.target.files[0]) {
-          setImportFile(e.target.files[0]);
-          setImportError(null);
-      }
+    if (e.target.files && e.target.files[0]) {
+      setImportFile(e.target.files[0]);
+      setImportError(null);
+    }
   };
 
   const confirmImport = async () => {
     if (!importFile) {
-        setImportError("Vui lòng chọn file Excel");
-        return;
+      setImportError("Vui lòng chọn file Excel");
+      return;
     }
 
     try {
@@ -127,7 +127,7 @@ const DeviceInfoManagementPage: React.FC = () => {
       formData.append('file', importFile);
 
       // Fix: Gọi đúng endpoint POST /import thay vì /bulk
-      await api.post('/device-infos/import', formData); 
+      await api.post('/device-infos/import', formData);
 
       toast.success(`Nhập dữ liệu thành công!`);
       setShowImportModal(false);
@@ -143,13 +143,13 @@ const DeviceInfoManagementPage: React.FC = () => {
 
   // === DOWNLOAD TEMPLATE ===
   const downloadTemplate = async () => {
-      try {
-          const response = await api.get('/device-infos/export-template', { responseType: 'blob' });
-          const blob = new Blob([response.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-          saveAs(blob, 'Mau_nhap_thong_tin_thiet_bi.xlsx');
-      } catch (error) {
-          toast.error('Không thể tải file mẫu');
-      }
+    try {
+      const response = await api.get('/device-infos/export-template', { responseType: 'blob' });
+      const blob = new Blob([response.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      saveAs(blob, 'Mau_nhap_thong_tin_thiet_bi.xlsx');
+    } catch (error) {
+      toast.error('Không thể tải file mẫu');
+    }
   };
 
   // === ACTIONS ===
@@ -169,13 +169,18 @@ const DeviceInfoManagementPage: React.FC = () => {
     }
   };
 
+  const handleViewDetails = (device: DeviceInfo) => {
+    setSelectedDevice(device);
+    setShowDetailModal(true);
+  };
+
   const handleDeleteDeviceInfo = async (deviceId: string) => {
     if (!window.confirm('Bạn có chắc chắn muốn xóa?')) return;
     try {
       setActionLoading(`delete-${deviceId}`);
       await api.delete(`/device-infos/${deviceId}`);
       toast.success('Xóa thành công');
-      
+
       if (deviceInfos.length === 1 && currentPage > 1) {
         loadDeviceInfos(currentPage - 1);
       } else {
@@ -204,12 +209,12 @@ const DeviceInfoManagementPage: React.FC = () => {
       // Thử gọi endpoint xóa nhiều (nếu có) hoặc loop
       // Giả sử backend hỗ trợ POST /device-infos/delete-multiple hoặc loop client
       try {
-          await api.post('/device-infos/delete-multiple', selectedDeviceInfos);
+        await api.post('/device-infos/delete-multiple', selectedDeviceInfos);
       } catch (e) {
-          // Fallback loop
-          await Promise.all(selectedDeviceInfos.map(id => api.delete(`/device-infos/${id}`)));
+        // Fallback loop
+        await Promise.all(selectedDeviceInfos.map(id => api.delete(`/device-infos/${id}`)));
       }
-      
+
       toast.success(`Đã xử lý xóa ${selectedDeviceInfos.length} item`);
       setSelectedDeviceInfos([]);
       loadDeviceInfos(currentPage);
@@ -234,7 +239,7 @@ const DeviceInfoManagementPage: React.FC = () => {
 
   const paginate = (pageNumber: number) => {
     if (pageNumber >= 1 && pageNumber <= totalPages) {
-        loadDeviceInfos(pageNumber);
+      loadDeviceInfos(pageNumber);
     }
   };
 
@@ -293,44 +298,44 @@ const DeviceInfoManagementPage: React.FC = () => {
 
   // Render Pagination Component
   const renderPagination = () => {
-      const pages = [];
-      // Luôn hiển thị pagination
-      const total = Math.max(1, totalPages); 
-      
-      for (let i = 1; i <= total; i++) {
-          if (i === 1 || i === total || (i >= currentPage - 1 && i <= currentPage + 1)) {
-              pages.push(i);
-          } else if (pages[pages.length - 1] !== '...') {
-              pages.push('...');
-          }
-      }
+    const pages = [];
+    // Luôn hiển thị pagination
+    const total = Math.max(1, totalPages);
 
-      return (
-        <div className="d-flex align-items-center gap-1">
-            <button className="btn btn-outline-primary btn-sm rounded-pill px-3" onClick={() => paginate(currentPage - 1)} disabled={currentPage === 1 || loading}>
-                <FontAwesomeIcon icon={faChevronLeft} className="small me-1" /> Trước
-            </button>
-            {pages.map((page, index) => (
-                <React.Fragment key={index}>
-                    {page === '...' ? (
-                        <span className="px-2 text-muted">...</span>
-                    ) : (
-                        <button 
-                            className={`btn btn-sm rounded-pill px-3 ${currentPage === page ? 'btn-primary text-white' : 'btn-outline-primary'}`} 
-                            onClick={() => paginate(page as number)} 
-                            disabled={loading}
-                            style={{ minWidth: '32px' }}
-                        >
-                            {page}
-                        </button>
-                    )}
-                </React.Fragment>
-            ))}
-            <button className="btn btn-outline-primary btn-sm rounded-pill px-3" onClick={() => paginate(currentPage + 1)} disabled={currentPage === total || loading}>
-                Sau <FontAwesomeIcon icon={faChevronRight} className="small ms-1" />
-            </button>
-        </div>
-      );
+    for (let i = 1; i <= total; i++) {
+      if (i === 1 || i === total || (i >= currentPage - 1 && i <= currentPage + 1)) {
+        pages.push(i);
+      } else if (pages[pages.length - 1] !== '...') {
+        pages.push('...');
+      }
+    }
+
+    return (
+      <div className="d-flex align-items-center gap-1">
+        <button className="btn btn-outline-primary btn-sm rounded-pill px-3" onClick={() => paginate(currentPage - 1)} disabled={currentPage === 1 || loading}>
+          <FontAwesomeIcon icon={faChevronLeft} className="small me-1" /> Trước
+        </button>
+        {pages.map((page, index) => (
+          <React.Fragment key={index}>
+            {page === '...' ? (
+              <span className="px-2 text-muted">...</span>
+            ) : (
+              <button
+                className={`btn btn-sm rounded-pill px-3 ${currentPage === page ? 'btn-primary text-white' : 'btn-outline-primary'}`}
+                onClick={() => paginate(page as number)}
+                disabled={loading}
+                style={{ minWidth: '32px' }}
+              >
+                {page}
+              </button>
+            )}
+          </React.Fragment>
+        ))}
+        <button className="btn btn-outline-primary btn-sm rounded-pill px-3" onClick={() => paginate(currentPage + 1)} disabled={currentPage === total || loading}>
+          Sau <FontAwesomeIcon icon={faChevronRight} className="small ms-1" />
+        </button>
+      </div>
+    );
   };
 
   return (
@@ -495,7 +500,7 @@ const DeviceInfoManagementPage: React.FC = () => {
               </tbody>
             </table>
           </div>
-          
+
           {/* Pagination (Luôn hiển thị) */}
           <div className="card-footer bg-light d-flex flex-column flex-sm-row justify-content-between align-items-center p-3 gap-2">
             <small className="text-muted">
@@ -556,9 +561,9 @@ const DeviceInfoManagementPage: React.FC = () => {
               </div>
               <div className="modal-body p-3">
                 <div className="d-flex justify-content-end mb-3">
-                    <button className="btn btn-outline-primary btn-sm" onClick={downloadTemplate}>
-                        <FontAwesomeIcon icon={faFileExcel} className="me-2"/>Tải file mẫu chuẩn
-                    </button>
+                  <button className="btn btn-outline-primary btn-sm" onClick={downloadTemplate}>
+                    <FontAwesomeIcon icon={faFileExcel} className="me-2" />Tải file mẫu chuẩn
+                  </button>
                 </div>
                 {importErrors.length > 0 && (
                   <div className="alert alert-warning small">

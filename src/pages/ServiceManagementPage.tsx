@@ -1,5 +1,5 @@
 // src/pages/ServiceManagementPage.tsx
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
@@ -32,8 +32,8 @@ const initialFormState = {
 
 // Interface chỉ dùng cho việc hiển thị FE
 interface PaginationInfo {
-  totalItems: number; // Tổng số item đã tải về (ví dụ 1000)
-  totalPages: number; // Tổng số trang hiển thị (ví dụ 1000/50 = 20 trang)
+  totalItems: number; 
+  totalPages: number; 
 }
 
 const ServiceManagementPage: React.FC = () => {
@@ -70,16 +70,32 @@ const ServiceManagementPage: React.FC = () => {
   const [showRestoreModal, setShowRestoreModal] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
 
-  const brandOptions = (Array.isArray(brands) ? brands : [])
-    .map(brand => brand.name)
-    .filter(name => name.trim() !== '');
+  // --- FIX 1: Lọc danh sách Brand trùng lặp để hiển thị trong Dropdown ---
+  const uniqueBrands = useMemo(() => {
+    const unique = new Map();
+    if (Array.isArray(brands)) {
+        brands.forEach(brand => {
+            // Chuẩn hóa tên về chữ thường và trim để so sánh
+            const normalizedName = brand.name?.trim().toLowerCase();
+            if (normalizedName && !unique.has(normalizedName)) {
+                unique.set(normalizedName, brand);
+            }
+        });
+    }
+    return Array.from(unique.values());
+  }, [brands]);
+
+  // --- FIX 2: Lọc danh sách Brand Options cho logic thêm mới ---
+  const brandOptions = uniqueBrands.map(brand => brand.name);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const modalRootRef = useRef<HTMLElement | null>(null);
   const [serviceTypes, setServiceTypes] = useState<string[]>([]);
 
   const handleServiceTypesChange = useCallback((types: string[]) => {
-    setServiceTypes(types);
+    // Đảm bảo service types cũng unique
+    const uniqueTypes = Array.from(new Set(types));
+    setServiceTypes(uniqueTypes);
   }, []);
 
   const handleAddNewClick = () => {
@@ -111,8 +127,6 @@ const ServiceManagementPage: React.FC = () => {
     if (isAllSelected) {
       setSelectedRows(new Set());
     } else {
-      // Chỉ chọn những item đang hiển thị trên trang hiện tại hoặc chọn tất cả 1000 item tùy logic
-      // Ở đây chọn tất cả các item đã tải về
       const allIds = new Set(services.map(service => service.id));
       setSelectedRows(allIds);
     }
@@ -177,7 +191,6 @@ const ServiceManagementPage: React.FC = () => {
 
   useEffect(() => {
     clearSelection();
-    // Khi search hoặc filter thay đổi, reset về trang 1
     setCurrentPage(1); 
   }, [searchQuery, selectedCategory]);
 
@@ -185,12 +198,10 @@ const ServiceManagementPage: React.FC = () => {
     setIsAllSelected(selectedRows.size === services.length && services.length > 0);
   }, [selectedRows, services]);
 
-  // --- HÀM LOAD DATA (CHỈ GỌI API 1 LẦN LẤY 1000 ITEM) ---
   const loadServices = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
-      // Luôn gọi skip = 0 và limit = API_LIMIT (1000)
       const combinedSearch = [selectedCategory, searchQuery].filter(Boolean).join(' ');
 
       const response = await serviceService.getAllServices(0, API_LIMIT, combinedSearch);
@@ -198,7 +209,6 @@ const ServiceManagementPage: React.FC = () => {
       
       setServices(servicesData);
       
-      // Tính toán số trang hiển thị dựa trên UI_PAGE_SIZE
       const totalItems = servicesData.length;
       const totalPages = Math.ceil(totalItems / UI_PAGE_SIZE);
       
@@ -214,7 +224,7 @@ const ServiceManagementPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [searchQuery, selectedCategory]); // Xóa currentPage khỏi dependency để tránh gọi API liên tục
+  }, [searchQuery, selectedCategory]); 
 
   const loadAllComponentBrands = useCallback(async () => {
     setBrandsLoading(true);
@@ -239,21 +249,18 @@ const ServiceManagementPage: React.FC = () => {
     loadAllComponentBrands();
   }, [loadAllComponentBrands]);
 
-  // Debounce search
   useEffect(() => {
     const timer = setTimeout(() => {
       loadServices();
     }, 500);
     return () => clearTimeout(timer);
-  }, [loadServices]); // Bỏ currentPage ra khỏi đây
+  }, [loadServices]); 
 
   const handleCategorySelect = (category: string | null) => setSelectedCategory(category);
 
-  // --- XỬ LÝ CHUYỂN TRANG Ở FRONTEND ---
   const handlePageChange = (page: number) => {
     if (page >= 1 && page <= paginationInfo.totalPages && page !== currentPage) {
       setCurrentPage(page);
-      // Scroll lên đầu bảng thay vì đầu trang web
       const tableElement = document.querySelector('.table-responsive');
       if (tableElement) tableElement.scrollTop = 0;
     }
@@ -324,13 +331,13 @@ const ServiceManagementPage: React.FC = () => {
         let success = 0, errors = 0;
         for (const row of rows) {
           const serviceData = {
-            name: row['Loại dịch vụ'] || row['Loại'] || 'Khác',
-            thuonghieu: row['Thương hiệu'] || null,
-            description: row['Mô tả'] || row['Máy'] || null,
+            name: (row['Loại dịch vụ'] || row['Loại'] || 'Khác').trim(),
+            thuonghieu: (row['Thương hiệu'] || '').trim() || null,
+            description: (row['Mô tả'] || row['Máy'] || '').trim() || null,
             price: String(row['Giá (VND)'] || row['Giá'] || 0).replace(/\D/g, ''),
-            warranty: row['Bảo hành'] || '6 tháng',
-            note: row['Ghi chú'] || null,
-            mausac: row['Màu sắc'] || null
+            warranty: (row['Bảo hành'] || '6 tháng').trim(),
+            note: (row['Ghi chú'] || '').trim() || null,
+            mausac: (row['Màu sắc'] || '').trim() || null
           };
           try {
             await serviceService.createService(serviceData);
@@ -357,19 +364,42 @@ const ServiceManagementPage: React.FC = () => {
     if (!currentData.name) return toast.error('Vui lòng chọn loại dịch vụ!');
     if (!currentData.description?.trim()) return toast.error('Vui lòng nhập Mô tả/Tên máy!');
 
+    // --- FIX 3: Làm sạch dữ liệu (Trim) trước khi gửi đi ---
+    const cleanData = {
+        ...currentData,
+        name: currentData.name.trim(),
+        thuonghieu: currentData.thuonghieu ? currentData.thuonghieu.trim() : null,
+        description: currentData.description.trim(),
+        note: currentData.note ? currentData.note.trim() : null,
+        warranty: currentData.warranty ? currentData.warranty.trim() : null
+    };
+
     setIsSaving(true);
     try {
       if (isEditMode && editId) {
-        await serviceService.updateService(editId, currentData);
+        await serviceService.updateService(editId, cleanData);
         toast.success('Cập nhật thành công!');
       } else {
-        await serviceService.createService(currentData);
+        await serviceService.createService(cleanData);
         toast.success('Thêm dịch vụ thành công!');
       }
       setShowModal(false);
       refreshAll();
     } catch (err: any) {
-      toast.error(err.response?.data?.detail?.[0]?.msg || err.response?.data?.message || 'Lưu thất bại!');
+      // --- SỬA LẠI PHẦN THÔNG BÁO LỖI TẠI ĐÂY ---
+      console.error("Lỗi submit:", err);
+      
+      // Lấy nội dung lỗi từ backend trả về
+      const rawMsg = err.response?.data?.detail || err.response?.data?.message || '';
+      const errorMsgString = typeof rawMsg === 'string' ? rawMsg.toLowerCase() : JSON.stringify(rawMsg).toLowerCase();
+
+      // Kiểm tra các từ khóa thường gặp khi bị trùng lặp
+      if (errorMsgString.includes('exist') || errorMsgString.includes('duplicate') || errorMsgString.includes('trùng')) {
+        toast.error('Dịch vụ này đã tồn tại! Vui lòng kiểm tra lại tên hoặc mô tả.');
+      } else {
+        // Các lỗi khác thì hiện chi tiết hoặc thông báo chung
+        toast.error(typeof rawMsg === 'string' ? rawMsg : 'Lưu thất bại! Vui lòng thử lại.');
+      }
     } finally {
       setIsSaving(false);
     }
@@ -460,7 +490,6 @@ const ServiceManagementPage: React.FC = () => {
       </td></tr>
     );
 
-    // --- LOGIC CẮT DỮ LIỆU ĐỂ HIỂN THỊ (QUAN TRỌNG) ---
     const indexOfLastItem = currentPage * UI_PAGE_SIZE;
     const indexOfFirstItem = indexOfLastItem - UI_PAGE_SIZE;
     const currentTableData = services.slice(indexOfFirstItem, indexOfLastItem);
@@ -518,6 +547,7 @@ const ServiceManagementPage: React.FC = () => {
                     <div className="row g-4">
                       <div className="col-12 col-md-6">
                         <label className="form-label fw-semibold text-primary">Loại dịch vụ *</label>
+                        {/* Sử dụng serviceTypes đã được lọc trùng ở trên */}
                         <select className="form-select rounded-3" value={currentData.name || ''} onChange={e => setCurrentData(prev => ({ ...prev, name: e.target.value }))} required disabled={isSaving}>
                           <option value="">-- Chọn loại dịch vụ --</option>
                           {serviceTypes.map(type => (<option key={type} value={type}>{type}</option>))}
@@ -534,9 +564,10 @@ const ServiceManagementPage: React.FC = () => {
                             <div className="spinner-border spinner-border-sm text-primary" role="status"><span className="visually-hidden">Đang tải...</span></div>Đang tải...
                           </div>
                         ) : (
+                          /* --- FIX 4: Sử dụng uniqueBrands đã lọc để hiển thị Option --- */
                           <select className="form-select rounded-3" value={currentData.thuonghieu || ''} onChange={e => setCurrentData(prev => ({ ...prev, thuonghieu: e.target.value }))} disabled={isSaving}>
                             <option value="">-- Chọn thương hiệu --</option>
-                            {brands.map(brand => (<option key={brand.id} value={brand.name}>{brand.name}</option>))}
+                            {uniqueBrands.map(brand => (<option key={brand.id} value={brand.name}>{brand.name}</option>))}
                           </select>
                         )}
                       </div>
