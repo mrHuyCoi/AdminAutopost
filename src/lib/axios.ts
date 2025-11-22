@@ -1,22 +1,30 @@
-// src/lib/axios.ts
 import axios from 'axios';
 import qs from 'qs';
 
+// QUAN TRỌNG: Key này phải khớp tuyệt đối với bên useAuth.ts
+const TOKEN_KEY = 'accessToken'; 
+
 const apiClient = axios.create({
   // baseURL: 'http://127.0.0.1:8000/api/v1',
+<<<<<<< HEAD
   baseURL: 'https://4fd9f5472189.ngrok-free.app/api/v1',
+=======
+  baseURL: 'https://ed686fcf75e0.ngrok-free.app/api/v1',
+>>>>>>> ffc3c04e11efb195a38a876370e5eb819d8027ef
   timeout: 10000,
 });
 
-
 // INTERCEPTOR: TỰ ĐỘNG THÊM TOKEN + XỬ LÝ FORM-URLENCODED
 apiClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem('access_token');
+  // --- [SỬA LỖI] Lấy đúng key accessToken ---
+  const token = localStorage.getItem(TOKEN_KEY);
+  // ------------------------------------------
+  
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
 
-  // CHỈ DÙNG form-urlencoded CHO CÁC ENDPOINT CỤ THỂ
+  // Giữ nguyên logic xử lý ngrok và form-urlencoded của bạn
   config.headers['ngrok-skip-browser-warning'] = 'true';
   const formUrlEncodedEndpoints = ['/auth/login'];
   const isFormUrlEncoded = formUrlEncodedEndpoints.some(endpoint =>
@@ -27,10 +35,8 @@ apiClient.interceptors.request.use((config) => {
     config.headers['Content-Type'] = 'application/x-www-form-urlencoded';
     config.data = qs.stringify(config.data);
   } else if (config.data instanceof FormData) {
-    // Nếu là FormData (upload file), để axios tự set Content-Type
     delete config.headers['Content-Type'];
   } else {
-    // MẶC ĐỊNH: JSON
     config.headers['Content-Type'] = 'application/json';
   }
 
@@ -60,15 +66,20 @@ apiClient.interceptors.response.use(
       url: error.config?.url,
     });
     
-    if (error.response?.status === 401) {
-      localStorage.removeItem('access_token');
-      window.location.href = '/login';
+    // --- [SỬA LỖI] Xử lý cả 401 và 403 ---
+    if (error.response && (error.response.status === 401 || error.response.status === 403)) {
+      // Xóa đúng key token
+      localStorage.removeItem(TOKEN_KEY);
+      
+      // Chỉ redirect nếu không phải đang ở trang login để tránh loop
+      if (window.location.pathname !== '/login') {
+         window.location.href = '/login';
+      }
     }
+    // ------------------------------------
     
     return Promise.reject(error);
   }
 );
 
 export default apiClient;
-
-
