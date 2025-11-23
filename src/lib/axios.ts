@@ -6,12 +6,8 @@ const TOKEN_KEY = 'accessToken';
 
 const apiClient = axios.create({
   // baseURL: 'http://127.0.0.1:8000/api/v1',
-<<<<<<< HEAD
-  baseURL: 'https://4fd9f5472189.ngrok-free.app/api/v1',
-=======
-  baseURL: 'https://ed686fcf75e0.ngrok-free.app/api/v1',
->>>>>>> ffc3c04e11efb195a38a876370e5eb819d8027ef
-  timeout: 10000,
+  baseURL: 'https://e3d98dfa0d4d.ngrok-free.app/api/v1',
+
 });
 
 // INTERCEPTOR: TỰ ĐỘNG THÊM TOKEN + XỬ LÝ FORM-URLENCODED
