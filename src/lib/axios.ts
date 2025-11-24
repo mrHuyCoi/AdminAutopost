@@ -6,7 +6,7 @@ const TOKEN_KEY = 'accessToken';
 
 const apiClient = axios.create({
   // baseURL: 'http://127.0.0.1:8000/api/v1',
-  baseURL: 'https://e3d98dfa0d4d.ngrok-free.app/api/v1',
+  baseURL: 'https://test.doiquanai.vn/api/v1',
 
 });
 
