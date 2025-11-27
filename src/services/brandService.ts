@@ -6,10 +6,6 @@ import toast from 'react-hot-toast';
 
 const API_URL = '/brands';
 
-/**
- * SỬA: Interface này phải khớp với DTO 'BrandCreate'
- * (service_id là bắt buộc)
- */
 export interface BrandPayload {
   service_id: string;
   name?: string | null;
@@ -27,39 +23,39 @@ export interface BrandPayload {
 // Hàm trợ giúp bóc tách
 const unwrapData = (response: any): any => {
   if (response.data && response.data.data) {
-    return response.data.data; 
+    return response.data.data;
   }
   if (response.data && Array.isArray(response.data.items)) {
-     // API /brands trả về { data: [], metadata: {...} }
-     return { 
-       data: response.data.items, 
-       metadata: response.data.metadata 
-     };
+    // API /brands trả về { data: [], metadata: {...} }
+    return {
+      data: response.data.items,
+      metadata: response.data.metadata
+    };
   }
-   if (response.data) {
+  if (response.data) {
     return response.data;
   }
   return response;
 };
 
 export const brandService = {
-  
+
   /**
    * Lấy danh sách brands (khớp với server-side pagination)
    */
   getAllBrands: async (
-    skip: number, 
+    skip: number,
     limit: number = 10,
     search: string = ''
-  ): Promise<PaginatedResponse<Brand>> => { // Sửa: Trả về PaginatedResponse
+  ): Promise<PaginatedResponse<Brand>> => { 
     try {
       const params = { skip, limit, search };
       const response = await http.get<any>(API_URL, { params });
-      
+
       // SỬA: Logic bóc tách metadata
       const data = response.data.data || [];
       const metadata = response.data.metadata || {};
-      
+
       return {
         items: data,
         total: metadata.total || data.length,
@@ -77,22 +73,35 @@ export const brandService = {
    * Tạo brand mới
    */
   createBrand: async (data: BrandPayload): Promise<Brand> => {
-    // SỬA: Thêm service_code ngẫu nhiên để tránh lỗi UniqueViolationError
+  try {
     const payload = {
       ...data,
-      service_code: `BR-${Date.now().toString().slice(-6)}`
-    }
+      service_code: `BR${Date.now()}${Math.floor(Math.random() * 9999)}`
+    };
+
     const response = await http.post(API_URL, payload);
     return unwrapData(response);
-  },
+
+  } catch (error: any) {
+    console.error("❌ ERROR RESPONSE:", error.response?.data);
+    throw error;
+  }
+},
+
+
 
   /**
    * Cập nhật brand
    */
   updateBrand: async (id: string, data: Partial<BrandPayload>): Promise<Brand> => {
-    const response = await http.put(`${API_URL}/${id}`, data);
-    return unwrapData(response);
-  },
+  const payload = {
+    ...data,
+    warranty: data.warranty ?? undefined   // 🟩 KHÔNG GỬI NULL
+  };
+  const response = await http.put(`${API_URL}/${id}`, payload);
+  return unwrapData(response);
+},
+
 
   /**
    * Xóa brand
@@ -102,7 +111,7 @@ export const brandService = {
   },
 
   // ... (Các hàm khác giữ nguyên) ...
-  
+
   getBrandById: async (id: string): Promise<Brand> => {
     const response = await http.get(`${API_URL}/${id}`);
     return response.data.data;
@@ -145,3 +154,29 @@ export const brandService = {
     return response.data.data || [];
   }
 };
+
+
+
+// import api from "../lib/axios";
+// import { Brand, BrandCreate, BrandUpdate } from "../types/brand";
+
+// export const brandService = {
+//   async getBrands(params?: any) {
+//     const res = await api.get("/brands", { params });
+//     return res.data;
+//   },
+
+//   async createBrand(payload: BrandCreate) {
+//     const res = await api.post("/brands", payload);
+//     return res.data;
+//   },
+
+//   async updateBrand(id: string, payload: BrandUpdate) {
+//     const res = await api.put(`/brands/${id}`, payload);
+//     return res.data;
+//   },
+
+//   // backend không hỗ trợ delete => không dùng
+// };
+
+// export default brandService;

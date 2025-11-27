@@ -1,3 +1,4 @@
+
 // src/pages/ChatbotPermissionPage.tsx
 import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
@@ -8,131 +9,115 @@ import {
     faCrown, faClock, faUsers, faCheckCircle,
     faTimesCircle, faFilter, faSync, faCopy, faExclamationTriangle
 } from '@fortawesome/free-solid-svg-icons';
+import apiClient from '../lib/axios';
 
-import {
-    chatbotSubscriptionService,
-    UserChatbotSubscription
-} from '../services/chatbotSubscriptionService';
+// --- ĐỊNH NGHĨA API (ĐÃ FIX LỖI 422) ---
+const chatbotApi = {
+    getAllSubscriptions: async () => {
+        const res = await apiClient.get('/chatbot-subscriptions/admin/subscriptions');
+        return res.data;
+    },
+    approveSubscription: async (id: string, notes: string | null) => {
+        // FIX: Thêm trường "status": "approved" theo yêu cầu backend
+        return await apiClient.post(`/chatbot-subscriptions/admin/subscriptions/${id}/approve`, {
+            status: 'approved',
+            notes: notes
+        });
+    },
+    rejectSubscription: async (id: string, reason: string) => {
+        // FIX: Thêm trường "status": "rejected" để đồng bộ
+        return await apiClient.post(`/chatbot-subscriptions/admin/subscriptions/${id}/reject`, {
+            status: 'rejected',
+            reason: reason
+        });
+    },
+    deleteSubscription: async (id: string) => {
+        return await apiClient.delete(`/chatbot-subscriptions/admin/subscriptions/${id}`);
+    }
+};
 
-// Safe get modal root (SSR compatible)
 const modalRoot = typeof document !== 'undefined' ? document.getElementById('modal-root') : null;
 
-// Helper: Chuyển lỗi validate thành chuỗi
-const getErrorMessage = (err: any): string => {
-    const data = err?.response?.data;
-
-    if (Array.isArray(data?.detail)) {
-        return data.detail.map((e: any) => e.msg || 'Lỗi không xác định').join(', ');
-    }
-
-    if (typeof data?.detail === 'string') return data.detail;
-    if (data?.message) return data.message;
-
-    return 'Đã xảy ra lỗi. Vui lòng thử lại.';
-};
+interface UserChatbotSubscription {
+    id: string;
+    user: { id: string; email: string; full_name: string } | null;
+    plan: { id: string; name: string; price: number } | null;
+    status: 'pending' | 'approved' | 'rejected';
+    is_active: boolean;
+    start_date: string;
+    end_date: string;
+    total_price: number;
+    created_at: string;
+}
 
 const ChatbotPermissionPage: React.FC = () => {
     const [subscriptions, setSubscriptions] = useState<UserChatbotSubscription[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    
-    // Filter & Pagination State
+
     const [activeTab, setActiveTab] = useState<'pending' | 'approved' | 'rejected' | 'all'>('pending');
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 10;
 
     const [actionLoading, setActionLoading] = useState<string | null>(null);
 
-    // Modal states
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [deleteId, setDeleteId] = useState<string | null>(null);
     const [showActionModal, setShowActionModal] = useState(false);
     const [actionType, setActionType] = useState<'approve' | 'reject' | null>(null);
     const [actionId, setActionId] = useState<string | null>(null);
     const [actionNotes, setActionNotes] = useState<string>('');
-    const [selectedUser, setSelectedUser] = useState<UserChatbotSubscription['user'] | null>(null);
+    const [selectedUser, setSelectedUser] = useState<any>(null);
 
-    // Dùng ID Admin cố định
-    const currentAdminId: string | null = "869e4ec5-3f10-4dad-9fa9-5dbff4d83bc3"; 
-
+    // --- LOAD DATA ---
     const loadSubscriptions = async () => {
         try {
             setLoading(true);
             setError(null);
+            
+            const res = await chatbotApi.getAllSubscriptions();
+            
+            let list = [];
+            if (Array.isArray(res)) list = res;
+            else if (res?.data && Array.isArray(res.data)) list = res.data;
+            else if (res?.items && Array.isArray(res.items)) list = res.items;
 
-            const res = await chatbotSubscriptionService.getAllSubscriptions();
-
-            const list =
-                Array.isArray(res)
-                    ? res
-                    : Array.isArray(res?.data)
-                        ? res.data
-                        : [];
-
-            // Sắp xếp mới nhất lên đầu
             list.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-
+            
             setSubscriptions(list);
-            setCurrentPage(1); // Reset trang khi reload
         } catch (err: any) {
-            const errorMessage = getErrorMessage(err);
-            setError(errorMessage);
-            toast.error(errorMessage);
+            console.error("Lỗi tải data:", err);
+            setError('Không tải được danh sách. ' + (err.message || ''));
         } finally {
             setLoading(false);
         }
     };
 
-    useEffect(() => {
-        loadSubscriptions();
-    }, []);
+    useEffect(() => { loadSubscriptions(); }, []);
+    useEffect(() => { setCurrentPage(1); }, [activeTab]);
 
-    // Reset về trang 1 khi chuyển Tab
-    useEffect(() => {
-        setCurrentPage(1);
-    }, [activeTab]);
-
-    // --- LOGIC LỌC VÀ PHÂN TRANG ---
+    // --- FILTER & PAGINATION ---
     const filteredSubscriptions = useMemo(() => {
         if (activeTab === 'all') return subscriptions;
         return subscriptions.filter(s => s.status === activeTab);
     }, [subscriptions, activeTab]);
 
-    const totalItems = filteredSubscriptions.length;
-    const totalPages = Math.max(1, Math.ceil(totalItems / itemsPerPage));
-    
-    // Cắt dữ liệu cho trang hiện tại
+    const totalPages = Math.max(1, Math.ceil(filteredSubscriptions.length / itemsPerPage));
     const paginatedSubscriptions = useMemo(() => {
         const startIndex = (currentPage - 1) * itemsPerPage;
         return filteredSubscriptions.slice(startIndex, startIndex + itemsPerPage);
     }, [filteredSubscriptions, currentPage, itemsPerPage]);
 
-    const handlePageChange = (page: number) => {
-        if (page >= 1 && page <= totalPages) {
-            setCurrentPage(page);
-        }
-    };
-    // ---------------------------------
+    const stats = useMemo(() => ({
+        total: subscriptions.length,
+        pending: subscriptions.filter(s => s.status === 'pending').length,
+        approved: subscriptions.filter(s => s.status === 'approved').length,
+        rejected: subscriptions.filter(s => s.status === 'rejected').length,
+        active: subscriptions.filter(s => s.is_active).length,
+    }), [subscriptions]);
 
-    const stats = useMemo(() => {
-        const total = subscriptions.length;
-        const pending = subscriptions.filter(s => s.status === 'pending').length;
-        const approved = subscriptions.filter(s => s.status === 'approved').length;
-        const rejected = subscriptions.filter(s => s.status === 'rejected').length;
-        const active = subscriptions.filter(s => s.is_active).length;
-        return { total, pending, approved, rejected, active };
-    }, [subscriptions]);
-
-    const handleActionClick = (
-        id: string,
-        type: 'approve' | 'reject',
-        user: UserChatbotSubscription['user']
-    ) => {
-        if (!user || !user.email) {
-            toast.error('Thông tin người dùng không hợp lệ');
-            return;
-        }
-
+    // --- ACTIONS ---
+    const handleActionClick = (id: string, type: 'approve' | 'reject', user: any) => {
         setActionId(id);
         setActionType(type);
         setSelectedUser(user);
@@ -140,53 +125,27 @@ const ChatbotPermissionPage: React.FC = () => {
         setShowActionModal(true);
     };
 
-    const handleDeleteClick = (id: string) => {
-        setDeleteId(id);
-        setShowDeleteModal(true);
-    };
-
-    const handleCloseModals = () => {
-        if (actionLoading) return;
-        setShowActionModal(false);
-        setShowDeleteModal(false);
-        setActionId(null);
-        setActionType(null);
-        setDeleteId(null);
-        setActionNotes('');
-        setSelectedUser(null);
-    };
-
     const handleConfirmAction = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!actionId || !actionType || !selectedUser) return;
+        if (!actionId || !actionType) return;
         
-        if (!currentAdminId) {
-            toast.error('Lỗi cấu hình: Không tìm thấy ID Admin.');
-            return;
-        }
-
-        const notes = actionNotes.trim();
-        if (actionType === 'reject' && !notes) {
-            toast.error('Vui lòng nhập lý do từ chối');
-            return;
-        }
-
-        const loadingKey = `action-${actionId}`;
-        setActionLoading(loadingKey);
-
+        setActionLoading(`action-${actionId}`);
         try {
             if (actionType === 'approve') {
-                await chatbotSubscriptionService.approveSubscription(actionId, currentAdminId, notes || null);
-                toast.success('Đã phê duyệt thành công');
+                await chatbotApi.approveSubscription(actionId, actionNotes);
+                toast.success('Đã duyệt thành công!');
             } else {
-                await chatbotSubscriptionService.rejectSubscription(actionId, currentAdminId, notes);
-                toast.success('Đã từ chối đăng ký');
+                await chatbotApi.rejectSubscription(actionId, actionNotes);
+                toast.success('Đã từ chối!');
             }
             await loadSubscriptions();
-            handleCloseModals();
+            setShowActionModal(false);
         } catch (err: any) {
-            const errorMessage = getErrorMessage(err);
-            toast.error(errorMessage);
+            console.error(err);
+            const msg = err?.response?.data?.detail 
+                ? JSON.stringify(err.response.data.detail) 
+                : 'Thao tác thất bại';
+            toast.error(msg);
         } finally {
             setActionLoading(null);
         }
@@ -194,164 +153,49 @@ const ChatbotPermissionPage: React.FC = () => {
 
     const handleConfirmDelete = async () => {
         if (!deleteId) return;
-        const loadingKey = `delete-${deleteId}`;
-        setActionLoading(loadingKey);
-
+        setActionLoading(`delete-${deleteId}`);
         try {
-            await chatbotSubscriptionService.deleteSubscription(deleteId);
-            toast.success('Đã xóa đăng ký');
-            
+            await chatbotApi.deleteSubscription(deleteId);
+            toast.success('Đã xóa!');
             setSubscriptions(prev => prev.filter(s => s.id !== deleteId));
-            
-            // Logic: Nếu trang hiện tại trống sau khi xóa, lùi lại 1 trang
-            if (paginatedSubscriptions.length === 1 && currentPage > 1) {
-                setCurrentPage(prev => prev - 1);
-            }
-
-            handleCloseModals();
+            setShowDeleteModal(false);
         } catch (err: any) {
-            const errorMessage = getErrorMessage(err);
-            toast.error(errorMessage);
+            toast.error('Xóa thất bại');
         } finally {
             setActionLoading(null);
         }
     };
 
-    const renderSubscriptionTable = () => {
-        if (loading) {
-            return Array.from({ length: 5 }).map((_, i) => (
-                <tr key={i}>
-                    <td colSpan={7}>
-                        <div className="d-flex align-items-center p-3">
-                            <div className="placeholder-glow w-100">
-                                <div className="placeholder col-12 h-5 rounded"></div>
-                            </div>
-                        </div>
-                    </td>
-                </tr>
-            ));
-        }
+    // --- RENDER ---
+    const renderTable = () => {
+        if (loading) return <tr><td colSpan={7} className="text-center py-5">Đang tải...</td></tr>;
+        if (error) return <tr><td colSpan={7} className="text-center py-5 text-danger">{error}</td></tr>;
+        if (paginatedSubscriptions.length === 0) return <tr><td colSpan={7} className="text-center py-5 text-muted">Không có dữ liệu</td></tr>;
 
-        if (error) {
-            return (
-                <tr>
-                    <td colSpan={7} className="text-center py-5">
-                        <div className="alert alert-danger d-inline-block">
-                            <FontAwesomeIcon icon={faExclamationTriangle} className="me-2" />
-                            {error}
-                            <button
-                                className="btn btn-sm btn-outline-danger ms-3"
-                                onClick={loadSubscriptions}
-                            >
-                                <FontAwesomeIcon icon={faSync} /> Thử lại
-                            </button>
-                        </div>
-                    </td>
-                </tr>
-            );
-        }
-
-        if (paginatedSubscriptions.length === 0) {
-            return (
-                <tr>
-                    <td colSpan={7} className="text-center py-5 text-muted">
-                        <FontAwesomeIcon icon={faFilter} size="3x" className="mb-3 opacity-25" />
-                        <p className="mb-1 fw-medium">Không có dữ liệu</p>
-                        <small>Chưa có đăng ký nào ở trạng thái này</small>
-                    </td>
-                </tr>
-            );
-        }
-
-        return paginatedSubscriptions.map((sub) => (
-            <tr key={sub.id} className={`transition-all ${!sub.is_active ? 'opacity-75' : ''}`}>
-                <td className="ps-4 py-3">
-                    <div className="d-flex align-items-center">
-                        <div className="bg-gradient d-flex align-items-center justify-content-center rounded-circle text-white fw-bold me-3"
-                            style={{
-                                width: '40px',
-                                height: '40px',
-                                background: 'linear-gradient(135deg, #667eea, #764ba2)',
-                                fontSize: '0.9rem',
-                            }}
-                        >
-                            {sub.user?.full_name?.charAt(0).toUpperCase() || 'U'}
-                        </div>
-                        <div>
-                            <div className="fw-semibold">{sub.user?.full_name || 'Chưa có tên'}</div>
-                            <div className="small text-muted">{sub.user?.email || 'N/A'}</div>
-                        </div>
-                    </div>
+        return paginatedSubscriptions.map(sub => (
+            <tr key={sub.id} className={!sub.is_active ? 'opacity-75' : ''}>
+                <td className="ps-4">
+                    <div className="fw-bold">{sub.user?.full_name || 'No Name'}</div>
+                    <div className="small text-muted">{sub.user?.email}</div>
                 </td>
+                <td><span className="badge bg-info text-dark">{sub.plan?.name}</span></td>
+                <td className="text-success fw-bold">{(sub.total_price || 0).toLocaleString()} ₫</td>
+                <td className="small">{new Date(sub.start_date).toLocaleDateString('vi-VN')}</td>
                 <td>
-                    <span className="badge bg-primary px-2 py-1">
-                        <FontAwesomeIcon icon={faCrown} className="me-1" />
-                        {sub.plan?.name || 'Gói không xác định'}
-                    </span>
+                    {sub.status === 'pending' && <span className="badge bg-warning text-dark">Chờ duyệt</span>}
+                    {sub.status === 'approved' && <span className="badge bg-success">Đã duyệt</span>}
+                    {sub.status === 'rejected' && <span className="badge bg-danger">Từ chối</span>}
                 </td>
-                <td className="fw-semibold text-success">
-                    {(sub.total_price || 0).toLocaleString('vi-VN')} ₫
-                </td>
-                <td className="small text-muted">
-                    {new Date(sub.start_date).toLocaleDateString('vi-VN')}
-                    <br />
-                    → {new Date(sub.end_date).toLocaleDateString('vi-VN')}
-                </td>
+                <td className="small">{new Date(sub.created_at).toLocaleDateString('vi-VN')}</td>
                 <td>
-                    {sub.status === 'pending' && (
-                        <span className="badge bg-warning text-dark px-2 py-1">
-                            <FontAwesomeIcon icon={faClock} /> Chờ duyệt
-                        </span>
-                    )}
-                    {sub.status === 'approved' && sub.is_active && (
-                        <span className="badge bg-success px-2 py-1">
-                            <FontAwesomeIcon icon={faCheck} /> Hoạt động
-                        </span>
-                    )}
-                    {sub.status === 'approved' && !sub.is_active && (
-                        <span className="badge bg-secondary px-2 py-1">
-                            <FontAwesomeIcon icon={faTimes} /> Hết hạn
-                        </span>
-                    )}
-                    {sub.status === 'rejected' && (
-                        <span className="badge bg-danger px-2 py-1">
-                            <FontAwesomeIcon icon={faTimes} /> Từ chối
-                        </span>
-                    )}
-                </td>
-                <td className="small text-muted">
-                    {sub.created_at ? new Date(sub.created_at).toLocaleDateString('vi-VN') : 'N/A'}
-                </td>
-                <td>
-                    <div className="btn-group btn-group-sm shadow-sm">
+                    <div className="btn-group btn-group-sm">
                         {sub.status === 'pending' && (
                             <>
-                                <button
-                                    className="btn btn-success btn-sm"
-                                    onClick={() => handleActionClick(sub.id, 'approve', sub.user!)}
-                                    title="Phê duyệt"
-                                    disabled={!!actionLoading}
-                                >
-                                    {actionLoading === `action-${sub.id}` ? <FontAwesomeIcon icon={faSpinner} spin /> : <FontAwesomeIcon icon={faCheck} />}
-                                </button>
-                                <button
-                                    className="btn btn-warning btn-sm"
-                                    onClick={() => handleActionClick(sub.id, 'reject', sub.user!)}
-                                    title="Từ chối"
-                                    disabled={!!actionLoading}
-                                >
-                                    <FontAwesomeIcon icon={faTimes} />
-                                </button>
+                                <button className="btn btn-success" onClick={() => handleActionClick(sub.id, 'approve', sub.user)} disabled={!!actionLoading}><FontAwesomeIcon icon={faCheck} /></button>
+                                <button className="btn btn-warning" onClick={() => handleActionClick(sub.id, 'reject', sub.user)} disabled={!!actionLoading}><FontAwesomeIcon icon={faTimes} /></button>
                             </>
                         )}
-                        <button
-                            className="btn btn-danger btn-sm"
-                            onClick={() => handleDeleteClick(sub.id)}
-                            title="Xóa"
-                            disabled={!!actionLoading}
-                        >
-                            {actionLoading === `delete-${sub.id}` ? <FontAwesomeIcon icon={faSpinner} spin /> : <FontAwesomeIcon icon={faTrash} />}
-                        </button>
+                        <button className="btn btn-danger" onClick={() => {setDeleteId(sub.id); setShowDeleteModal(true)}} disabled={!!actionLoading}><FontAwesomeIcon icon={faTrash} /></button>
                     </div>
                 </td>
             </tr>
@@ -360,234 +204,71 @@ const ChatbotPermissionPage: React.FC = () => {
 
     return (
         <div className="container-fluid px-4 py-3">
-            {/* Header */}
-            <div className="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-4 gap-3">
-                <div>
-                    <h1 className="h3 mb-1 text-dark fw-bold d-flex align-items-center">
-                        <FontAwesomeIcon icon={faCrown} className="me-2 text-primary" />
-                        Quản lý Quyền Chatbot
-                    </h1>
-                    <p className="text-muted mb-0 small">Phê duyệt, từ chối và quản lý đăng ký sử dụng chatbot AI</p>
-                </div>
-                <button
-                    className="btn btn-primary btn-sm d-flex align-items-center shadow-sm"
-                    onClick={loadSubscriptions}
-                    disabled={loading}
-                >
-                    <FontAwesomeIcon icon={faSync} className={`me-1 ${loading ? 'fa-spin' : ''}`} />
-                    {loading ? 'Đang tải...' : 'Làm mới'}
-                </button>
+            <div className="d-flex justify-content-between align-items-center mb-4">
+                <h1 className="h3 mb-0 text-dark fw-bold"><FontAwesomeIcon icon={faCrown} className="me-2 text-primary" />Quản lý Quyền Chatbot</h1>
+                <button className="btn btn-primary btn-sm" onClick={loadSubscriptions}><FontAwesomeIcon icon={faSync} /> Làm mới</button>
             </div>
 
-            {/* Stats Cards */}
+            {/* Stats */}
             <div className="row g-3 mb-4">
-                <div className="col-6 col-lg-3">
-                    <div className="card border-0 shadow-sm h-100 position-relative overflow-hidden"
-                        style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
-                        <div className="card-body text-white position-relative z-1">
-                            <div className="d-flex justify-content-between align-items-center">
-                                <div>
-                                    <h6 className="mb-1 opacity-75">Tổng đăng ký</h6>
-                                    <h3 className="mb-0 fw-bold">{stats.total}</h3>
-                                </div>
-                                <FontAwesomeIcon icon={faUsers} size="2x" className="opacity-50" />
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div className="col-6 col-lg-3">
-                    <div className="card border-0 shadow-sm h-100"
-                        style={{ background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)' }}>
-                        <div className="card-body text-white">
-                            <div className="d-flex justify-content-between align-items-center">
-                                <div>
-                                    <h6 className="mb-1 opacity-75">Chờ duyệt</h6>
-                                    <h3 className="mb-0 fw-bold">{stats.pending}</h3>
-                                </div>
-                                <FontAwesomeIcon icon={faClock} size="2x" className="opacity-50" />
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div className="col-6 col-lg-3">
-                    <div className="card border-0 shadow-sm h-100"
-                        style={{ background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)' }}>
-                        <div className="card-body text-white">
-                            <div className="d-flex justify-content-between align-items-center">
-                                <div>
-                                    <h6 className="mb-1 opacity-75">Đang hoạt động</h6>
-                                    <h3 className="mb-0 fw-bold">{stats.active}</h3>
-                                </div>
-                                <FontAwesomeIcon icon={faCheckCircle} size="2x" className="opacity-50" />
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div className="col-6 col-lg-3">
-                    <div className="card border-0 shadow-sm h-100"
-                        style={{ background: 'linear-gradient(135deg, #ff9a9e 0%, #fad0c4 100%)' }}>
-                        <div className="card-body text-white">
-                            <div className="d-flex justify-content-between align-items-center">
-                                <div>
-                                    <h6 className="mb-1 opacity-75">Đã từ chối</h6>
-                                    <h3 className="mb-0 fw-bold">{stats.rejected}</h3>
-                                </div>
-                                <FontAwesomeIcon icon={faTimesCircle} size="2x" className="opacity-50" />
-                            </div>
-                        </div>
-                    </div>
-                </div>
+               <div className="col-md-3"><div className="card bg-primary text-white p-3"><h3>{stats.total}</h3><small>Tổng đăng ký</small></div></div>
+               <div className="col-md-3"><div className="card bg-warning text-dark p-3"><h3>{stats.pending}</h3><small>Chờ duyệt</small></div></div>
+               <div className="col-md-3"><div className="card bg-success text-white p-3"><h3>{stats.approved}</h3><small>Đã duyệt</small></div></div>
+               <div className="col-md-3"><div className="card bg-danger text-white p-3"><h3>{stats.rejected}</h3><small>Từ chối</small></div></div>
             </div>
 
-            {/* Tabs + Table */}
-            <div className="card shadow-sm border-0 overflow-hidden">
-                <div className="card-header bg-white p-3">
-                    <ul className="nav nav-tabs card-header-tabs border-0 m-0">
-                        {[
-                            { key: 'pending', icon: faClock, label: 'Chờ duyệt', count: stats.pending, color: 'warning' },
-                            { key: 'approved', icon: faCheck, label: 'Đã duyệt', count: stats.approved },
-                            { key: 'rejected', icon: faTimes, label: 'Từ chối', count: stats.rejected, color: 'danger' },
-                            { key: 'all', icon: faUsers, label: 'Tất cả', count: stats.total },
-                        ].map(tab => (
-                            <li key={tab.key} className="nav-item">
-                                <button
-                                    className={`nav-link d-flex align-items-center gap-2 px-3 py-2 rounded-3 transition-all ${
-                                        activeTab === tab.key ? 'active bg-primary text-white' : 'text-muted'
-                                        }`}
-                                    onClick={() => setActiveTab(tab.key as any)}
-                                    style={{ minWidth: '120px' }}
-                                >
-                                    <FontAwesomeIcon icon={tab.icon} />
-                                    {tab.label}
-                                    {tab.count > 0 && (
-                                        <span className={`badge ms-1 ${activeTab === tab.key ? 'bg-white text-primary' : `bg-${tab.color || 'secondary'} text-white`}`}>
-                                            {tab.count}
-                                        </span>
-                                    )}
-                                </button>
-                            </li>
-                        ))}
-                    </ul>
-                </div>
+            {/* Tabs */}
+            <ul className="nav nav-tabs mb-3">
+                {['pending', 'approved', 'rejected', 'all'].map((t: any) => (
+                    <li className="nav-item" key={t}>
+                        <button className={`nav-link ${activeTab === t ? 'active fw-bold' : ''}`} onClick={() => setActiveTab(t)}>
+                            {t === 'all' ? 'Tất cả' : t === 'pending' ? 'Chờ duyệt' : t === 'approved' ? 'Đã duyệt' : 'Từ chối'}
+                        </button>
+                    </li>
+                ))}
+            </ul>
+
+            {/* Table */}
+            <div className="card shadow-sm border-0">
                 <div className="card-body p-0">
                     <div className="table-responsive">
                         <table className="table table-hover align-middle mb-0">
-                            <thead className="bg-gradient text-white" style={{ background: 'linear-gradient(90deg, #667eea, #764ba2)' }}>
+                            <thead className="bg-light">
                                 <tr>
-                                    <th className="ps-4">Người dùng</th>
-                                    <th>Gói</th>
-                                    <th>Giá</th>
-                                    <th>Thời hạn</th>
-                                    <th>Trạng thái</th>
-                                    <th>Ngày tạo</th>
-                                    <th className="text-center" style={{ width: '130px' }}>Thao tác</th>
+                                    <th className="ps-4">User</th><th>Gói</th><th>Giá</th><th>Ngày bắt đầu</th><th>Trạng thái</th><th>Ngày tạo</th><th>Thao tác</th>
                                 </tr>
                             </thead>
-                            <tbody>
-                                {renderSubscriptionTable()}
-                            </tbody>
+                            <tbody>{renderTable()}</tbody>
                         </table>
                     </div>
                 </div>
-
-                {/* PHÂN TRANG (FOOTER) */}
-                {totalPages > 1 && (
-                    <div className="card-footer bg-white d-flex flex-column flex-sm-row justify-content-between align-items-center py-3 px-4 gap-3">
-                        <div className="small text-muted">
-                            Hiển thị <strong>{(currentPage - 1) * itemsPerPage + 1}</strong> - <strong>{Math.min(currentPage * itemsPerPage, totalItems)}</strong> trong <strong>{totalItems}</strong> kết quả
-                        </div>
-                        <nav>
-                            <ul className="pagination pagination-sm mb-0">
-                                <li className={`page-item ${currentPage === 1 ? 'disabled' : ''}`}>
-                                    <button className="page-link" onClick={() => handlePageChange(currentPage - 1)}>Trước</button>
-                                </li>
-                                
-                                {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
-                                    <li key={page} className={`page-item ${currentPage === page ? 'active' : ''}`}>
-                                        <button className="page-link" onClick={() => handlePageChange(page)}>{page}</button>
-                                    </li>
-                                ))}
-
-                                <li className={`page-item ${currentPage === totalPages ? 'disabled' : ''}`}>
-                                    <button className="page-link" onClick={() => handlePageChange(currentPage + 1)}>Sau</button>
-                                </li>
-                            </ul>
-                        </nav>
-                    </div>
-                )}
+                {totalPages > 1 && <div className="card-footer bg-white py-3"><div className="d-flex justify-content-end"><button className="btn btn-sm btn-outline-secondary me-2" disabled={currentPage===1} onClick={() => setCurrentPage(p=>p-1)}>Trước</button><span className="align-self-center mx-2">Trang {currentPage}/{totalPages}</span><button className="btn btn-sm btn-outline-secondary ms-2" disabled={currentPage===totalPages} onClick={() => setCurrentPage(p=>p+1)}>Sau</button></div></div>}
             </div>
 
-            {/* === MODAL PORTAL === */}
-            {modalRoot && createPortal(
+            {/* Modals */}
+            {createPortal(
                 <>
-                    {/* Backdrop */}
-                    {(showActionModal || showDeleteModal) && (
-                        <div className="modal-backdrop fade show" style={{ zIndex: 1040 }} />
-                    )}
-
+                    {(showActionModal || showDeleteModal) && <div className="modal-backdrop fade show"></div>}
+                    
                     {/* Action Modal */}
-                    {showActionModal && selectedUser && (
-                        <div className="modal fade show d-block" style={{ zIndex: 1050 }} tabIndex={-1}>
+                    {showActionModal && (
+                        <div className="modal fade show d-block" tabIndex={-1} style={{zIndex: 1050}}>
                             <div className="modal-dialog modal-dialog-centered">
-                                <div className="modal-content shadow-lg">
-                                    <form onSubmit={handleConfirmAction}>
-                                        <div className={`modal-header ${actionType === 'approve' ? 'bg-success' : 'bg-warning'} text-white`}>
-                                            <h5 className="modal-title">
-                                                <FontAwesomeIcon icon={actionType === 'approve' ? faCheckCircle : faTimesCircle} className="me-2" />
-                                                {actionType === 'approve' ? 'Phê duyệt đăng ký' : 'Từ chối đăng ký'}
-                                            </h5>
-                                            <button type="button" className="btn-close btn-close-white" onClick={handleCloseModals} disabled={!!actionLoading} />
-                                        </div>
-                                        <div className="modal-body">
-                                            <div className="alert alert-info d-flex justify-content-between align-items-center mb-3">
-                                                <div>
-                                                    <strong>Người dùng:</strong> {selectedUser.full_name || 'N/A'}
-                                                    <span className="text-muted"> ({selectedUser.email})</span>
-                                                </div>
-                                                <button
-                                                    type="button"
-                                                    className="btn btn-sm btn-outline-info"
-                                                    onClick={() => {
-                                                        navigator.clipboard.writeText(selectedUser.email);
-                                                        toast.success('Đã sao chép email');
-                                                    }}
-                                                >
-                                                    <FontAwesomeIcon icon={faCopy} />
-                                                </button>
-                                            </div>
-
-                                            <div className="mb-3">
-                                                <label className="form-label">
-                                                    {actionType === 'reject' ? 'Lý do từ chối *' : 'Ghi chú (tùy chọn)'}
-                                                </label>
-                                                <textarea
-                                                    className="form-control"
-                                                    rows={4}
-                                                    value={actionNotes}
-                                                    onChange={(e) => setActionNotes(e.target.value)}
-                                                    placeholder={actionType === 'reject' ? 'Bắt buộc nhập lý do...' : 'Ghi chú nội bộ...'}
-                                                    required={actionType === 'reject'}
-                                                    disabled={!!actionLoading}
-                                                />
-                                            </div>
-                                        </div>
-                                        <div className="modal-footer bg-light">
-                                            <button type="button" className="btn btn-secondary" onClick={handleCloseModals} disabled={!!actionLoading}>
-                                                Hủy
-                                            </button>
-                                            <button
-                                                type="submit"
-                                                className={`btn ${actionType === 'approve' ? 'btn-success' : 'btn-warning'}`}
-                                                disabled={!!actionLoading || (actionType === 'reject' && !actionNotes.trim())}
-                                            >
-                                                {actionLoading ? (
-                                                    <>Đang xử lý <FontAwesomeIcon icon={faSpinner} spin className="ms-2" /></>
-                                                ) : (
-                                                    actionType === 'approve' ? 'Phê duyệt' : 'Từ chối'
-                                                )}
-                                            </button>
-                                        </div>
-                                    </form>
+                                <div className="modal-content">
+                                    <div className="modal-header">
+                                        <h5 className="modal-title">{actionType === 'approve' ? 'Phê duyệt' : 'Từ chối'}</h5>
+                                        <button className="btn-close" onClick={() => setShowActionModal(false)}></button>
+                                    </div>
+                                    <div className="modal-body">
+                                        <p>Xác nhận {actionType === 'approve' ? 'duyệt' : 'từ chối'} yêu cầu của <strong>{selectedUser?.email}</strong>?</p>
+                                        <textarea className="form-control" placeholder="Ghi chú (tùy chọn)..." value={actionNotes} onChange={e => setActionNotes(e.target.value)}></textarea>
+                                    </div>
+                                    <div className="modal-footer">
+                                        <button className="btn btn-secondary" onClick={() => setShowActionModal(false)}>Hủy</button>
+                                        <button className={`btn ${actionType === 'approve' ? 'btn-success' : 'btn-danger'}`} onClick={handleConfirmAction} disabled={!!actionLoading}>
+                                            {actionLoading ? 'Đang xử lý...' : 'Xác nhận'}
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -595,40 +276,18 @@ const ChatbotPermissionPage: React.FC = () => {
 
                     {/* Delete Modal */}
                     {showDeleteModal && (
-                        <div className="modal fade show d-block" style={{ zIndex: 1050 }} tabIndex={-1}>
+                        <div className="modal fade show d-block" tabIndex={-1} style={{zIndex: 1050}}>
                             <div className="modal-dialog modal-dialog-centered">
-                                <div className="modal-content shadow-lg">
-                                    <div className="modal-header bg-danger text-white">
-                                        <h5 className="modal-title">
-                                            <FontAwesomeIcon icon={faExclamationTriangle} className="me-2" />
-                                            Xác nhận xóa
-                                        </h5>
-                                        <button type="button" className="btn-close btn-close-white" onClick={handleCloseModals} disabled={!!actionLoading} />
-                                    </div>
-                                    <div className="modal-body">
-                                        <div className="alert alert-warning">
-                                            <strong>Cảnh báo:</strong> Hành động này <strong>không thể hoàn tác</strong>.
-                                        </div>
-                                        <p>Bạn có chắc chắn muốn xóa đăng ký này?</p>
-                                    </div>
-                                    <div className="modal-footer bg-light">
-                                        <button type="button" className="btn btn-secondary" onClick={handleCloseModals} disabled={!!actionLoading}>
-                                            Hủy
-                                        </button>
-                                        <button type="button" className="btn btn-danger" onClick={handleConfirmDelete} disabled={!!actionLoading}>
-                                            {actionLoading ? (
-                                                <>Đang xóa <FontAwesomeIcon icon={faSpinner} spin className="ms-2" /></>
-                                            ) : (
-                                                'Xác nhận xóa'
-                                            )}
-                                        </button>
-                                    </div>
+                                <div className="modal-content">
+                                    <div className="modal-header bg-danger text-white"><h5 className="modal-title">Xác nhận xóa</h5><button className="btn-close btn-close-white" onClick={() => setShowDeleteModal(false)}></button></div>
+                                    <div className="modal-body"><p>Hành động này không thể hoàn tác. Bạn chắc chắn muốn xóa?</p></div>
+                                    <div className="modal-footer"><button className="btn btn-secondary" onClick={() => setShowDeleteModal(false)}>Hủy</button><button className="btn btn-danger" onClick={handleConfirmDelete} disabled={!!actionLoading}>{actionLoading ? 'Đang xóa...' : 'Xóa ngay'}</button></div>
                                 </div>
                             </div>
                         </div>
                     )}
                 </>,
-                modalRoot
+                modalRoot!
             )}
         </div>
     );

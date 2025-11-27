@@ -4,26 +4,41 @@ import { createPortal } from 'react-dom';
 import toast from 'react-hot-toast';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
-  faEdit, faTrash, faPlus, faMobileAlt, 
+  faEdit, faTrash, faPlus, faMobileAlt,
   faSearch, faTimes, faSync, faSpinner, faMicrochip
 } from '@fortawesome/free-solid-svg-icons';
 
 import { deviceBrandService, DeviceBrand, DeviceBrandPayload } from '../services/deviceBrandService';
 import { brandService, BrandPayload } from '../services/brandService';
+import { serviceService } from '../services/serviceService';
 import { Brand } from '../types/brand';
 import { Service } from '../types/service';
-import { serviceService } from '../services/serviceService';
-
-const modalRoot = document.getElementById('modal-root');
 
 const initialDeviceBrandState: DeviceBrandPayload = { name: '' };
 const initialComponentBrandState: BrandPayload = {
-  name: '',
   service_id: '',
-  note: '',
-  warranty: '6 tháng',
-  price: '0',
-  wholesale_price: '0',
+  name: '',
+  service_code: '',
+  note: null,
+  warranty: '',           // đổi từ null → '' (chuỗi rỗng)
+  device_brand_id: null,
+  price: null,
+  wholesale_price: null,
+  device_type: null,
+  color: null,
+};
+
+const normalizeList = (res: any) => {
+  if (!res) return [];
+  if (Array.isArray(res)) return res;
+  // Support responses: { data: [...] } , { data: { items: [...] } } , { items: [...] } , axios-res.data (already)
+  if (res.data) {
+    if (Array.isArray(res.data)) return res.data;
+    if (res.data.items && Array.isArray(res.data.items)) return res.data.items;
+    if (Array.isArray(res.data.data)) return res.data.data;
+  }
+  if (res.items && Array.isArray(res.items)) return res.items;
+  return [];
 };
 
 const BrandManagementPage: React.FC = () => {
@@ -31,7 +46,7 @@ const BrandManagementPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const modalRootRef = useRef<HTMLElement | null>(null);
+  const modalRootRef = useRef<HTMLElement | null>(typeof document !== 'undefined' ? document.getElementById('modal-root') : null);
   const [isSaving, setIsSaving] = useState(false);
 
   const [deviceBrands, setDeviceBrands] = useState<DeviceBrand[]>([]);
@@ -55,17 +70,26 @@ const BrandManagementPage: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const [devBrands, compBrandsData, servicesData] = await Promise.all([
+      // device brands (GET /device-brands)
+      // component brands (GET /brands) - paginated
+      // services (GET /services) - used to pick service_id when creating brand
+      const [devRes, brandsRes, servicesRes] = await Promise.all([
         deviceBrandService.getAllDeviceBrands(),
         brandService.getAllBrands(0, 100, searchQuery),
-        serviceService.getAllServices(0, 100, '')
+        serviceService.getAllServices(0, 100, ''),
       ]);
-      setDeviceBrands(devBrands);
-      setComponentBrands(compBrandsData.items || []);
-      setServices(servicesData.data || []);
+
+      setDeviceBrands(normalizeList(devRes));
+      // brandService.getAllBrands returns PaginatedResponse { items, total, ... }
+      const brandItems = Array.isArray((brandsRes as any).items) ? (brandsRes as any).items : normalizeList(brandsRes);
+      setComponentBrands(brandItems);
+
+      // servicesRes may be { data: [...] } or array
+      const svcList = normalizeList(servicesRes);
+      setServices(svcList);
     } catch (err: any) {
       console.error('Error loading data:', err);
-      const msg = err.response?.data?.detail || 'Lỗi khi tải dữ liệu';
+      const msg = err?.response?.data?.detail || err?.message || 'Lỗi khi tải dữ liệu';
       setError(msg);
       toast.error(msg);
     } finally {
@@ -74,20 +98,20 @@ const BrandManagementPage: React.FC = () => {
   }, [searchQuery]);
 
   useEffect(() => {
-    modalRootRef.current = document.getElementById('modal-root');
+    modalRootRef.current = typeof document !== 'undefined' ? document.getElementById('modal-root') : null;
     loadData();
   }, [loadData]);
 
   const filteredDeviceBrands = React.useMemo(() => {
     if (!searchQuery.trim()) return deviceBrands;
     const searchLower = searchQuery.toLowerCase();
-    return deviceBrands.filter(brand => brand.name.toLowerCase().includes(searchLower));
+    return deviceBrands.filter(b => (b.name || '').toLowerCase().includes(searchLower));
   }, [deviceBrands, searchQuery]);
 
   const filteredComponentBrands = React.useMemo(() => {
     if (!searchQuery.trim()) return componentBrands;
     const searchLower = searchQuery.toLowerCase();
-    return componentBrands.filter(brand => brand.name.toLowerCase().includes(searchLower));
+    return componentBrands.filter(b => (b.name || '').toLowerCase().includes(searchLower));
   }, [componentBrands, searchQuery]);
 
   const handleAddNew = () => {
@@ -109,22 +133,19 @@ const BrandManagementPage: React.FC = () => {
 
   const handleEditClick = (brand: DeviceBrand | Brand) => {
     if (activeTab === 'device') {
-      const devBrand = brand as DeviceBrand;
-      setEditDeviceBrandId(devBrand.id);
-      setCurrentDeviceBrand({ name: devBrand.name });
+      const dev = brand as DeviceBrand;
+      setEditDeviceBrandId(dev.id);
+      setCurrentDeviceBrand({ name: dev.name || '' });
       setIsEditDevice(true);
       setShowDeviceModal(true);
     } else {
-      const compBrand = brand as Brand;
-      setEditComponentBrandId(compBrand.id);
-      setCurrentComponentBrand({
-        name: compBrand.name,
-        service_id: compBrand.service_id,
-        note: compBrand.note || '',
-        warranty: compBrand.warranty || '6 tháng',
-        price: compBrand.price || '0',
-        wholesale_price: compBrand.wholesale_price || '0',
-      });
+      const comp = brand as Brand;
+      setEditComponentBrandId(String(comp.id));
+      setCurrentComponentBrand(prev => ({
+        ...prev,
+        name: comp.name || '',
+        service_id: (comp.service_id as string) || services[0]?.id || '',
+      }));
       setIsEditComponent(true);
       setShowComponentModal(true);
     }
@@ -156,20 +177,28 @@ const BrandManagementPage: React.FC = () => {
   const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
+
     try {
       if (activeTab === 'device') {
-        if (!currentDeviceBrand.name.trim()) {
+        // === DEVICE BRAND ===
+        if (!currentDeviceBrand.name?.trim()) {
           toast.error('Vui lòng nhập tên thương hiệu!');
           setIsSaving(false);
           return;
         }
+
         if (isEditDevice && editDeviceBrandId) {
-          await deviceBrandService.updateDeviceBrand(editDeviceBrandId, currentDeviceBrand);
+          await deviceBrandService.updateDeviceBrand(editDeviceBrandId, {
+            name: currentDeviceBrand.name.trim(),
+          });
         } else {
-          await deviceBrandService.createDeviceBrand(currentDeviceBrand);
+          await deviceBrandService.createDeviceBrand({
+            name: currentDeviceBrand.name.trim(),
+          });
         }
       } else {
-        if (!currentComponentBrand.name.trim()) {
+        // === COMPONENT BRAND ===
+        if (!currentComponentBrand.name?.trim()) {
           toast.error('Vui lòng nhập tên thương hiệu!');
           setIsSaving(false);
           return;
@@ -179,25 +208,60 @@ const BrandManagementPage: React.FC = () => {
           setIsSaving(false);
           return;
         }
+
+        // TỰ ĐỘNG SINH service_code DUY NHẤT nếu chưa có hoặc bị trùng
+        const generateUniqueServiceCode = (): string => {
+          const existing = componentBrands
+            .filter(b => b.service_id === currentComponentBrand.service_id)
+            .map(b => b.service_code || '')
+            .filter(code => /^DV\d+$/.test(code))
+            .map(code => parseInt(code.replace('DV', ''), 10))
+            .sort((a, b) => a - b);
+
+          let next = 1;
+          while (existing.includes(next)) next++;
+          return `DV${String(next).padStart(6, '0')}`; // DV000001, DV000002,...
+        };
+
+        const finalServiceCode =
+          currentComponentBrand.service_code?.trim() || generateUniqueServiceCode();
+
+        const payload: BrandPayload = {
+          service_id: currentComponentBrand.service_id as string,
+          name: currentComponentBrand.name.trim(),
+          service_code: finalServiceCode,                    // ĐẢM BẢO DUY NHẤT
+          warranty: currentComponentBrand.warranty?.trim() || '6 tháng',
+          note: currentComponentBrand.note?.trim() || null,
+          device_brand_id: currentComponentBrand.device_brand_id || null,
+          price: currentComponentBrand.price || null,
+          wholesale_price: currentComponentBrand.wholesale_price || null,
+          device_type: currentComponentBrand.device_type || null,
+          color: currentComponentBrand.color || null,
+        };
+
         if (isEditComponent && editComponentBrandId) {
-          await brandService.updateBrand(editComponentBrandId, currentComponentBrand);
+          await brandService.updateBrand(editComponentBrandId, payload);
         } else {
-          await brandService.createBrand(currentComponentBrand);
+          await brandService.createBrand(payload);
         }
       }
+
       toast.success('Lưu thành công!');
       handleCloseModals();
-      loadData();
+      await loadData();
     } catch (err: any) {
       console.error('Error saving brand:', err);
       let errorMessage = 'Lưu thất bại!';
-      if (err.response?.data?.detail) {
-        if (Array.isArray(err.response.data.detail)) {
-          errorMessage = err.response.data.detail.map((e: any) => `${e.loc[1]}: ${e.msg}`).join('; ');
-        } else if (typeof err.response.data.detail === 'string') {
-          errorMessage = err.response.data.detail;
+
+      if (err?.response?.data?.detail) {
+        const d = err.response.data.detail;
+        if (Array.isArray(d)) {
+          errorMessage = d.map((x: any) => x.msg || JSON.stringify(x)).join('; ');
+        } else if (typeof d === 'string') {
+          errorMessage = d;
         }
       }
+
       toast.error(errorMessage);
     } finally {
       setIsSaving(false);
@@ -210,15 +274,18 @@ const BrandManagementPage: React.FC = () => {
     try {
       if (activeTab === 'device') {
         await deviceBrandService.deleteDeviceBrand(deleteId);
+        toast.success('Xóa thành công!');
       } else {
+        // try delete brand; if API doesn't support delete it will return error handled below
         await brandService.deleteBrand(deleteId);
+        toast.success('Xóa thành công!');
       }
-      toast.success('Xóa thành công!');
       handleCloseModals();
-      loadData();
+      await loadData();
     } catch (err: any) {
       console.error('Error deleting brand:', err);
-      toast.error(err.response?.data?.message || 'Xóa thất bại!');
+      const msg = err?.response?.data?.message || err?.response?.data?.detail || 'Xóa thất bại!';
+      toast.error(Array.isArray(msg) ? JSON.stringify(msg) : msg);
     } finally {
       setIsDeleting(false);
     }
@@ -237,7 +304,9 @@ const BrandManagementPage: React.FC = () => {
         </tr>
       ));
     }
+
     if (error) return <tr><td colSpan={2} className="text-center py-5 text-danger">{error}</td></tr>;
+
     if (filteredDeviceBrands.length === 0) {
       return (
         <tr>
@@ -262,7 +331,7 @@ const BrandManagementPage: React.FC = () => {
                 fontSize: '0.9rem',
               }}
             >
-              {brand.name.substring(0, 2).toUpperCase()}
+              {(brand.name || '').substring(0, 2).toUpperCase()}
             </div>
             <div>
               <strong className="d-block text-dark">{brand.name}</strong>
@@ -275,7 +344,7 @@ const BrandManagementPage: React.FC = () => {
             <button className="btn btn-outline-primary btn-sm rounded-pill px-3" onClick={() => handleEditClick(brand)}>
               <FontAwesomeIcon icon={faEdit} />
             </button>
-            <button className="btn btn-outline-danger btn-sm rounded-pill px-3" onClick={() => handleDeleteClick(brand.id)}>
+            <button className="btn btn-outline-danger btn-sm rounded-pill px-3" onClick={() => handleDeleteClick(String(brand.id))}>
               <FontAwesomeIcon icon={faTrash} />
             </button>
           </div>
@@ -288,7 +357,7 @@ const BrandManagementPage: React.FC = () => {
     if (loading) {
       return Array.from({ length: 3 }).map((_, i) => (
         <tr key={i}>
-          <td colSpan={3} className="py-4">
+          <td colSpan={2} className="py-4">
             <div className="placeholder-glow">
               <div className="placeholder col-8 h-5 rounded"></div>
               <div className="placeholder col-6 h-3 rounded mt-2"></div>
@@ -297,11 +366,13 @@ const BrandManagementPage: React.FC = () => {
         </tr>
       ));
     }
-    if (error) return <tr><td colSpan={3} className="text-center py-5 text-danger">{error}</td></tr>;
+
+    if (error) return <tr><td colSpan={2} className="text-center py-5 text-danger">{error}</td></tr>;
+
     if (filteredComponentBrands.length === 0) {
       return (
         <tr>
-          <td colSpan={3} className="text-center py-5 text-muted">
+          <td colSpan={2} className="text-center py-5 text-muted">
             <FontAwesomeIcon icon={faSearch} size="3x" className="mb-3 opacity-25" />
             <p className="mb-0 fw-medium">Không tìm thấy thương hiệu linh kiện</p>
           </td>
@@ -322,25 +393,20 @@ const BrandManagementPage: React.FC = () => {
                 fontSize: '0.9rem',
               }}
             >
-              {brand.name.substring(0, 2).toUpperCase()}
+              {(brand.name || '').substring(0, 2).toUpperCase()}
             </div>
             <div>
               <strong className="d-block text-dark">{brand.name}</strong>
-              <small className="text-muted">{brand.note || brand.id}</small>
+              <small className="text-muted">{brand.id}</small>
             </div>
           </div>
-        </td>
-        <td className="py-3">
-          <span className="badge rounded-pill px-3 py-2 bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25">
-            {brand.service?.name || 'N/A'}
-          </span>
         </td>
         <td className="text-center py-3">
           <div className="btn-group btn-group-sm" role="group">
             <button className="btn btn-outline-primary btn-sm rounded-pill px-3" onClick={() => handleEditClick(brand)}>
               <FontAwesomeIcon icon={faEdit} />
             </button>
-            <button className="btn btn-outline-danger btn-sm rounded-pill px-3" onClick={() => handleDeleteClick(brand.id)}>
+            <button className="btn btn-outline-danger btn-sm rounded-pill px-3" onClick={() => handleDeleteClick(String(brand.id))}>
               <FontAwesomeIcon icon={faTrash} />
             </button>
           </div>
@@ -401,7 +467,7 @@ const BrandManagementPage: React.FC = () => {
         {/* Component Brand Modal */}
         {showComponentModal && (
           <div className="modal fade show d-block" style={{ zIndex: 1050 }}>
-            <div className="modal-dialog modal-dialog-centered modal-lg">
+            <div className="modal-dialog modal-dialog-centered modal-md">
               <div className="modal-content shadow-lg rounded-3 overflow-hidden">
                 <div className="modal-header text-white" style={{ background: 'linear-gradient(135deg, #11998e 0%, #38ef7d 100%)' }}>
                   <h5 className="modal-title fw-bold">
@@ -413,46 +479,67 @@ const BrandManagementPage: React.FC = () => {
                 <form onSubmit={handleFormSubmit}>
                   <div className="modal-body p-4">
                     <div className="row g-4">
-                      <div className="col-md-6">
+
+                      <div className="col-12">
+                        <label className="form-label fw-semibold text-danger">Mã linh kiện * (duy nhất trong dịch vụ)</label>
+                        <input
+                          type="text"
+                          className="form-control rounded-3 border-danger"
+                          name="service_code"
+                          value={currentComponentBrand.service_code || ''}
+                          onChange={handleComponentBrandChange}
+                          required
+                          disabled={isSaving}
+                          placeholder="DV000001, DV000002, PIN001, MH001..."
+                        />
+                        <small className="text-danger">
+                          Bắt buộc nhập và phải duy nhất trong dịch vụ đã chọn!
+                        </small>
+                      </div>
+
+                      <div className="col-12">
                         <label className="form-label fw-semibold text-primary">Tên thương hiệu *</label>
                         <input
                           type="text"
                           className="form-control rounded-3"
                           name="name"
-                          value={currentComponentBrand.name}
+                          value={currentComponentBrand.name || ''}
                           onChange={handleComponentBrandChange}
                           required
                           disabled={isSaving}
                           placeholder="Pisen, Zin, KOR..."
                         />
                       </div>
-                      <div className="col-md-6">
+
+                      <div className="col-12">
+                        <label className="form-label fw-semibold text-primary">Bảo hành *</label>
+                        <input
+                          type="text"
+                          className="form-control rounded-3"
+                          name="warranty"
+                          value={currentComponentBrand.warranty || ''}
+                          onChange={handleComponentBrandChange}
+                          required
+                          disabled={isSaving}
+                          placeholder="6 tháng, 12 tháng, Không bảo hành..."
+                        />
+                        <small className="text-danger">Trường này bắt buộc (DB không cho null)</small>
+                      </div>
+
+                      <div className="col-12">
                         <label className="form-label fw-semibold text-primary">Thuộc Dịch vụ *</label>
                         <select
                           className="form-select rounded-3"
                           name="service_id"
-                          value={currentComponentBrand.service_id}
+                          value={currentComponentBrand.service_id || ''}
                           onChange={handleComponentBrandChange}
                           required
                           disabled={isSaving || services.length === 0}
                         >
                           <option value="">-- Chọn dịch vụ --</option>
-                          {services.map(service => (
-                            <option key={service.id} value={service.id}>{service.name}</option>
-                          ))}
+                          {services.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                         </select>
-                      </div>
-                      <div className="col-12">
-                        <label className="form-label fw-semibold">Ghi chú</label>
-                        <textarea
-                          className="form-control rounded-3"
-                          name="note"
-                          value={currentComponentBrand.note}
-                          onChange={handleComponentBrandChange}
-                          disabled={isSaving}
-                          rows={2}
-                          placeholder="Ghi chú (tùy chọn)"
-                        />
+                        <small className="text-muted d-block mt-1">API yêu cầu <code>service_id</code> khi tạo Brand.</small>
                       </div>
                     </div>
                   </div>
@@ -596,18 +683,10 @@ const BrandManagementPage: React.FC = () => {
           <div className="table-responsive">
             <table className="table table-hover align-middle mb-0">
               <thead className="bg-light">
-                {activeTab === 'device' ? (
-                  <tr>
-                    <th className="ps-4">Thương hiệu</th>
-                    <th className="text-center" style={{ width: '140px' }}>Hành động</th>
-                  </tr>
-                ) : (
-                  <tr>
-                    <th className="ps-4">Thương hiệu</th>
-                    <th>Dịch vụ</th>
-                    <th className="text-center" style={{ width: '140px' }}>Hành động</th>
-                  </tr>
-                )}
+                <tr>
+                  <th className="ps-4">Thương hiệu</th>
+                  <th className="text-center" style={{ width: '140px' }}>Hành động</th>
+                </tr>
               </thead>
               <tbody>
                 {activeTab === 'device' ? renderDeviceBrandTable() : renderComponentBrandTable()}
@@ -619,7 +698,7 @@ const BrandManagementPage: React.FC = () => {
 
       {renderModals()}
 
-      <style jsx>{`
+      <style>{`
         .nav-pills .nav-link {
           transition: all 0.2s ease;
         }
